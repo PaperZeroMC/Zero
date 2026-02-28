@@ -12,7 +12,6 @@ plugins {
 }
 
 if (!file(".git").exists()) {
-    // Zero start - project setup
     val errorText = """
         
         =====================[ ERROR ]=====================
@@ -25,17 +24,34 @@ if (!file(".git").exists()) {
          Built Zero jars are available for download at
          https://github.com/oneachina/Zero
          
-         See https://github.com/PaperMC/Paper/blob/main/CONTRIBUTING.md
-         for further information on building and modifying Paper forks.
+         See https://github.com/oneachina/Zero/blob/HEAD/CONTRIBUTING.md
+         for further information on building and modifying Zero.
         ===================================================
     """.trimIndent()
-    // Zero end - project setup
     error(errorText)
 }
 
 rootProject.name = "zero"
-
 for (name in listOf("zero-api", "zero-server")) {
     val projName = name.lowercase(Locale.ENGLISH)
     include(projName)
+    findProject(":$projName")!!.projectDir = file(name)
+}
+
+optionalInclude("test-plugin")
+
+fun optionalInclude(name: String, op: (ProjectDescriptor.() -> Unit)? = null) {
+    val settingsFile = file("$name.settings.gradle.kts")
+    if (settingsFile.exists()) {
+        apply(from = settingsFile)
+        findProject(":$name")?.let { op?.invoke(it) }
+    } else {
+        settingsFile.writeText(
+            """
+            // Uncomment to enable the '$name' project
+            // include(":$name")
+
+            """.trimIndent()
+        )
+    }
 }
