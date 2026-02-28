@@ -118,33 +118,26 @@ public class SetTPSCommand {
             double z = spawnPos.z() + Math.sin(angle) * distance;
             double y = level.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, new net.minecraft.core.BlockPos((int)x, 0, (int)z)).getY() + 1;
 
-            net.minecraft.core.BlockPos blockPos = new net.minecraft.core.BlockPos((int)x, (int)(y - 1), (int)z);
-            BlockState blockState = level.getBlockState(blockPos);
-            if (blockState.isSolid()) {
-                // Zero start - Correct entity creation based on summon command
-                // Check if position is within world bounds
-                if (!net.minecraft.world.level.Level.isInSpawnableBounds(blockPos)) {
-                    continue; // Skip this spawn
-                }
+            net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos((int)x, (int)y, (int)z);
 
-                // Create the entity with command spawn reason
-                Entity entity = entityType.create(level, EntitySpawnReason.COMMAND);
-                if (entity == null) {
-                    continue;
-                }
-
-                // Set position and rotation
-                entity.snapTo(x, y, z, entity.getYRot(), entity.getXRot());
-
-                // If it's a mob, perform finalization spawn (sets equipment, AI, etc.)
-                if (entity instanceof Mob mob) {
-                    mob.finalizeSpawn(level, level.getCurrentDifficultyAt(entity.blockPosition()), EntitySpawnReason.COMMAND, null);
-                }
-
-                // Add the entity to the world
-                level.addFreshEntity(entity);
-                // Zero end
+            // entity creation without ground check
+            if (!net.minecraft.world.level.Level.isInSpawnableBounds(pos)) {
+                continue;
             }
+
+            Entity entity = entityType.create(level, EntitySpawnReason.COMMAND);
+            if (entity == null) {
+                continue;
+            }
+
+            entity.snapTo(x, y, z, entity.getYRot(), entity.getXRot());
+
+            if (entity instanceof Mob mob) {
+                mob.finalizeSpawn(level, level.getCurrentDifficultyAt(entity.blockPosition()), EntitySpawnReason.COMMAND, null);
+            }
+
+            level.addFreshEntity(entity);
+            // Zero end
         }
     }
 }
