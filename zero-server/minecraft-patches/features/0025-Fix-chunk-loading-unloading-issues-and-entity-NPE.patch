@@ -1,0 +1,97 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: oneachina <ruiruixi@hotmail.com>
+Date: Sat, 28 Feb 2026 21:47:16 +0800
+Subject: [PATCH] Fix chunk loading/unloading issues and entity NPE
+
+
+diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkTaskScheduler.java b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkTaskScheduler.java
+index 5651792e5d4364f44c8b3d2bfb36f9aef005120e..6038bbe533073a893eda3378810c7646a5b2901f 100644
+--- a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkTaskScheduler.java
++++ b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkTaskScheduler.java
+@@ -48,6 +48,7 @@ import net.minecraft.world.level.chunk.status.ChunkPyramid;
+ import net.minecraft.world.level.chunk.status.ChunkStatus;
+ import net.minecraft.world.level.chunk.status.ChunkStep;
+ import net.minecraft.world.phys.Vec3;
++import java.util.concurrent.atomic.AtomicInteger;
+ import org.slf4j.Logger;
+ import java.io.File;
+ import java.time.LocalDateTime;
+@@ -131,7 +132,7 @@ public final class ChunkTaskScheduler {
+         }
+         
+         // Check server TPS
+-        double tps = this.world.getServer().getAverageTickTime() < 50.0 ? 20.0 : 1000.0 / this.world.getServer().getAverageTickTime();
++        double tps = this.world.getServer().getCurrentSmoothedTickTime() < 50.0 ? 20.0 : 1000.0 / this.world.getServer().getCurrentSmoothedTickTime();
+         if (tps < MIN_TPS_FOR_FULL_LOAD) {
+             // Reduce load rate based on TPS
+             double loadFactor = tps / MIN_TPS_FOR_FULL_LOAD;
+@@ -159,8 +160,8 @@ public final class ChunkTaskScheduler {
+         ((ChunkSystemChunkStatus)ChunkStatus.EMPTY).moonrise$setWriteRadius(0);
+         ((ChunkSystemChunkStatus)ChunkStatus.STRUCTURE_STARTS).moonrise$setWriteRadius(0);
+         ((ChunkSystemChunkStatus)ChunkStatus.STRUCTURE_REFERENCES).moonrise$setWriteRadius(0);
+-        ((ChunkSystemChunkStatus)ChunkStatus.BIOMES).moonrise$setWriteRadius(0);
+-        ((ChunkSystemChunkStatus)ChunkStatus.NOISE).moonrise$setWriteRadius(0);
++        ChunkStatus.BIOMES.moonrise$setWriteRadius(0);
++        ChunkStatus.NOISE.moonrise$setWriteRadius(0);
+         ((ChunkSystemChunkStatus)ChunkStatus.SURFACE).moonrise$setWriteRadius(0);
+         ((ChunkSystemChunkStatus)ChunkStatus.CARVERS).moonrise$setWriteRadius(0);
+         ((ChunkSystemChunkStatus)ChunkStatus.FEATURES).moonrise$setWriteRadius(1);
+diff --git a/net/minecraft/server/level/ServerChunkCache.java b/net/minecraft/server/level/ServerChunkCache.java
+index c850619f3ff84ac2977aad4791f913aaa5fd0487..9518e699e41df0e3101b98da7b317c439176767b 100644
+--- a/net/minecraft/server/level/ServerChunkCache.java
++++ b/net/minecraft/server/level/ServerChunkCache.java
+@@ -347,7 +347,7 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+         
+         for (ServerPlayer player : this.level.players) {
+             ChunkPos playerChunk = player.chunkPosition();
+-            double distanceSquared = ChunkPos.distSqr(chunkX, chunkZ, playerChunk.x, playerChunk.z);
++            double distanceSquared = new ChunkPos(chunkX, chunkZ).distanceSquared(playerChunk);
+             if (distanceSquared <= maxDistanceSquared) {
+                 return true;
+             }
+diff --git a/net/minecraft/world/entity/Entity.java b/net/minecraft/world/entity/Entity.java
+index 41506648031e9c7a1acf12f56ba02b4aadec344c..35c3f8c9915b5ea5d257bba56ac588dc90e8193b 100644
+--- a/net/minecraft/world/entity/Entity.java
++++ b/net/minecraft/world/entity/Entity.java
+@@ -4852,21 +4852,26 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
+         // init chunks
+         for (int currChunkZ = minChunkZ; currChunkZ <= maxChunkZ; ++currChunkZ) {
+             for (int currChunkX = minChunkX; currChunkX <= maxChunkX; ++currChunkX) {
+-                sections[currChunkX + chunkLenX*currChunkZ + chunkOffset] = chunkSource.getChunk(currChunkX, currChunkZ, net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false).getSections();
++                net.minecraft.world.level.chunk.ChunkAccess chunk = chunkSource.getChunk(currChunkX, currChunkZ, net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false);
++                if (chunk != null) {
++                    sections[currChunkX + chunkLenX*currChunkZ + chunkOffset] = chunk.getSections();
++                }
+             }
+         }
+ 
+         for (int currX = minBlockX; currX <= maxBlockX; ++currX) {
+             for (int currY = minBlockY; currY <= maxBlockY; ++currY) {
+                 for (int currZ = minBlockZ; currZ <= maxBlockZ; ++currZ) {
+-                    final FluidState fluidState = sections[(currX >> 4) + chunkLenX*(currZ >> 4) + chunkOffset][(currY >> 4) - minSection]
+-                        .states.get((currX & 15) | ((currZ & 15) << 4) | ((currY & 15) << 8)).getFluidState();
++                    net.minecraft.world.level.chunk.LevelChunkSection[] chunkSections = sections[(currX >> 4) + chunkLenX*(currZ >> 4) + chunkOffset];
++                    if (chunkSections != null) {
++                        final FluidState fluidState = chunkSections[(currY >> 4) - minSection]
++                            .states.get((currX & 15) | ((currZ & 15) << 4) | ((currY & 15) << 8)).getFluidState();
+ 
+-                    if (fluidState.isEmpty() || !fluidState.is(fluid)) {
+-                        continue;
+-                    }
++                        if (fluidState.isEmpty() || !fluidState.is(fluid)) {
++                            continue;
++                        }
+ 
+-                    mutablePos.set(currX, currY, currZ);
++                        mutablePos.set(currX, currY, currZ);
+ 
+                     // CraftBukkit start - store last lava contact location
+                     if (fluid == FluidTags.LAVA) {
+@@ -4897,6 +4902,7 @@ public abstract class Entity implements SyncedDataHolder, DebugValueSource, Name
+                     } else {
+                         pushVector = pushVector.add(flow);
+                     }
++                    }
+                 }
+             }
+         }
