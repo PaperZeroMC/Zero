@@ -23,17 +23,17 @@ paperweight {
     minecraftVersion = providers.gradleProperty("mcVersion")
     gitFilePatches = false
 
-    // Purpur start - Rebrand
-    val purpur = forks.register("purpur") {
+    // Zero start - Rebrand
+    val zero = forks.register("zero") {
         upstream.patchDir("paperServer") {
             upstreamPath = "paper-server"
             excludes = setOf("src/minecraft", "patches", "build.gradle.kts")
-            patchesDir = rootDirectory.dir("purpur-server/paper-patches")
+            patchesDir = rootDirectory.dir("zero-server/paper-patches")
             outputDir = rootDirectory.dir("paper-server")
         }
     }
-    activeFork = purpur
-    // Purpur end - Rebrand
+    activeFork = zero
+    // Zero end - Rebrand
 
     spigot {
         enabled = true
@@ -117,7 +117,7 @@ if (project.providers.gradleProperty("publishDevBundle").isPresent) {
     }
 }
 
-// Purpur start - Rebrand
+// Zero start - Rebrand
 sourceSets {
     main {
         java { srcDir("../paper-server/src/main/java") }
@@ -131,7 +131,7 @@ sourceSets {
 val log4jPlugins = sourceSets.create("log4jPlugins") {
     java { srcDir("../paper-server/src/log4jPlugins/java") }
 }
-// Purpur end - Rebrand
+// Zero end - Rebrand
 configurations.named(log4jPlugins.compileClasspathConfigurationName) {
     extendsFrom(configurations.compileClasspath.get())
 }
@@ -154,7 +154,7 @@ abstract class MockitoAgentProvider : CommandLineArgumentProvider {
 }
 
 dependencies {
-    implementation(project(":purpur-api")) // Purpur
+    implementation(project(":zero-api")) // Zero
     implementation("ca.spottedleaf:concurrentutil:0.0.8")
     implementation("org.jline:jline-terminal-ffm:3.27.1") // use ffm on java 22+
     implementation("org.jline:jline-terminal-jni:3.27.1") // fall back to jni on java 21
@@ -180,9 +180,9 @@ dependencies {
     implementation("org.ow2.asm:asm-commons:9.8")
     implementation("org.spongepowered:configurate-yaml:4.2.0")
 
-    implementation("org.mozilla:rhino-runtime:1.7.14") // Purpur
-    implementation("org.mozilla:rhino-engine:1.7.14") // Purpur
-    implementation("dev.omega24:upnp4j:1.0") // Purpur
+    implementation("org.mozilla:rhino-runtime:1.7.14") // Zero
+    implementation("org.mozilla:rhino-engine:1.7.14") // Zero
+    implementation("dev.omega24:upnp4j:1.0") // Zero
 
     // Deps that were previously in the API but have now been moved here for backwards compat, eventually to be removed
     runtimeOnly("commons-lang:commons-lang:2.6")
@@ -229,14 +229,14 @@ tasks.jar {
         val gitBranch = git.exec(providers, "rev-parse", "--abbrev-ref", "HEAD").get().trim()
         attributes(
             "Main-Class" to "org.bukkit.craftbukkit.Main",
-            "Implementation-Title" to "Purpur", // Purpur
+            "Implementation-Title" to "Zero", // Zero
             "Implementation-Version" to implementationVersion,
             "Implementation-Vendor" to date,
-            "Specification-Title" to "Purpur", // Purpur
+            "Specification-Title" to "Zero", // Zero
             "Specification-Version" to project.version,
-            "Specification-Vendor" to "Purpur Team", // Purpur
-            "Brand-Id" to "purpurmc:purpur", // Purpur
-            "Brand-Name" to "Purpur", // Purpur
+            "Specification-Vendor" to "Zero Team", // Zero
+            "Brand-Id" to "oneachina:zero", // Zero
+            "Brand-Name" to "Zero", // Zero
             "Build-Number" to (build ?: ""),
             "Build-Time" to buildTime.toString(),
             "Git-Branch" to gitBranch,
@@ -295,7 +295,7 @@ tasks.test {
     jvmArgumentProviders.add(provider)
 }
 
-val generatedDir: java.nio.file.Path = layout.projectDirectory.dir("../paper-server/src/generated/java").asFile.toPath() // Purpur
+val generatedDir: java.nio.file.Path = layout.projectDirectory.dir("../paper-server/src/generated/java").asFile.toPath() // Zero
 idea {
     module {
         generatedSourceDirs.add(generatedDir.toFile())
@@ -387,7 +387,7 @@ tasks.registerRunTask("runReobfPaperclip") {
     mainClass.set(null as String?)
 }
 
-/* fill { // Purpur - we don't use fill
+/* fill { // Zero - we don't use fill
     project("paper")
     versionFamily(paperweight.minecraftVersion.map { it.split(".", "-").takeWhile { part -> part.toIntOrNull() != null }.take(2).joinToString(".") })
     version(paperweight.minecraftVersion)
@@ -402,7 +402,7 @@ tasks.registerRunTask("runReobfPaperclip") {
             }
         }
     }
-} */ // Purpur - we don't use fill
+} */ // Zero - we don't use fill
 
 // tasks.register("rebuildMinecraftSourcesWithGit") {
 //     group = "temp"
