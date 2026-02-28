@@ -6,6 +6,10 @@ on:
     branches:
       - "ver/**"
 
+permissions:
+  contents: read
+  write-all: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,6 +24,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Configure Git
         run: git config --global user.email "no-reply@github.com" && git config --global user.name "Github Actions"
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
       - name: Apply Patches
         run: ./gradlew applyAllPatches --stacktrace
       - name: Build
