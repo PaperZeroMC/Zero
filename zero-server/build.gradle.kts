@@ -222,7 +222,7 @@ tasks.jar {
         val git = Git(rootProject.layout.projectDirectory.path)
         val mcVersion = rootProject.providers.gradleProperty("mcVersion").get()
         val build = System.getenv("BUILD_NUMBER") ?: null
-        val buildTime = Instant.now() // Zero: Always use current time
+        val buildTime = if (build != null) Instant.now() else Instant.EPOCH // Zero
         val gitHash = git.exec(providers, "rev-parse", "--short=7", "HEAD").get().trim()
         val implementationVersion = "$mcVersion-${build ?: "DEV"}-$gitHash"
         val date = git.exec(providers, "show", "-s", "--format=%ci", gitHash).get().trim()
@@ -235,7 +235,7 @@ tasks.jar {
             "Specification-Title" to "Zero", // Zero
             "Specification-Version" to project.version,
             "Specification-Vendor" to "Zero Team", // Zero
-            "Brand-Id" to "zeromc:zero", // Zero
+            "Brand-Id" to "oneachina:zero", // Zero
             "Brand-Name" to "Zero", // Zero
             "Build-Number" to (build ?: ""),
             "Build-Time" to buildTime.toString(),
@@ -407,8 +407,8 @@ tasks.registerRunTask("runReobfPaperclip") {
 // tasks.register("rebuildMinecraftSourcesWithGit") {
 //     group = "temp"
 //
-//     val patchDir = project.rootDir.resolve("purpur-server/minecraft-patches/sources").convertToPath().cleanDir()
-//     val inputDir = this.project.rootDir.resolve("purpur-server/src/minecraft/java").convertToPath()
+//     val patchDir = project.rootDir.resolve("zero-server/minecraft-patches/sources").convertToPath().cleanDir()
+//     val inputDir = this.project.rootDir.resolve("zero-server/src/minecraft/java").convertToPath()
 //
 //     val git = Git(inputDir)
 //     git("stash", "push").executeSilently(silenceErr = true)

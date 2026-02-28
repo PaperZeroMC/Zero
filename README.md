@@ -30,7 +30,7 @@ See [PurpurMC/Purpur](https://github.com/PurpurMC/Purpur), [PaperMC/Paper](https
 
 ## bStats
 
-[![bStats Graph Data](https://bstats.org/signatures/server-implementation/Purpur.svg)](https://bstats.org/plugin/server-implementation/Purpur)
+[![bStats Graph Data](https://bstats.org/signatures/server-implementation/Purpur.svg)](https://bstats.org/plugin/server-implementation/Zero)
 
 
 ## API
