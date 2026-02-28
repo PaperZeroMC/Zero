@@ -1,5 +1,14 @@
 --- a/net/minecraft/world/entity/EntityType.java
 +++ b/net/minecraft/world/entity/EntityType.java
+@@ -1223,7 +_,7 @@
+     private final String descriptionId;
+     private @Nullable Component description;
+     private final Optional<ResourceKey<LootTable>> lootTable;
+-    private final EntityDimensions dimensions;
++    public EntityDimensions dimensions;
+     private final float spawnDimensionsScale;
+     private final FeatureFlagSet requiredFeatures;
+     private final boolean allowedInPeaceful;
 @@ -1240,6 +_,16 @@
          return register(vanillaEntityId(key), builder);
      }

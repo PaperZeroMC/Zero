@@ -70,6 +70,15 @@
                      }
  
                      float f2 = f + f1;
+@@ -1509,7 +_,7 @@
+     }
+ 
+     @Override
+-    protected boolean canGlide() {
++    public boolean canGlide() {
+         return !this.abilities.flying && super.canGlide();
+     }
+ 
 @@ -1764,7 +_,23 @@
  
      @Override

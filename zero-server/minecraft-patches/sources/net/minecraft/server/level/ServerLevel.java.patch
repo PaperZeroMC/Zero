@@ -53,6 +53,23 @@
              // Paper start - create time skip event - move up calculations
              final long newDayTime = this.levelData.getDayTime() + 24000L;
              org.bukkit.event.world.TimeSkipEvent event = new org.bukkit.event.world.TimeSkipEvent(
+@@ -832,6 +_,16 @@
+             }
+ 
+             io.papermc.paper.entity.activation.ActivationRange.activateEntities(this); // Paper - EAR
++            // Zero start - Priority tick: players first, then other entities
++            int currentTick = this.server.getTickCount(); // Get current global tick count
++
++            // Tick all players (including their passengers via tickNonPassenger)
++            List<ServerPlayer> players = this.players;
++            for (ServerPlayer player : players) {
++                if (player.isRemoved()) continue;
++                this.tickNonPassenger(player);
++            }
++            // Zero end
+             this.entityTickList
+                 .forEach(
+                     entity -> {
 @@ -895,6 +_,13 @@
              this.serverLevelData.getScheduledEvents().tick(this.server, l);
              Profiler.get().pop();
