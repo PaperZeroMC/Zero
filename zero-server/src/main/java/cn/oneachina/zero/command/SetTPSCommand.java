@@ -121,12 +121,28 @@ public class SetTPSCommand {
             net.minecraft.core.BlockPos blockPos = new net.minecraft.core.BlockPos((int)x, (int)(y - 1), (int)z);
             BlockState blockState = level.getBlockState(blockPos);
             if (blockState.isSolid()) {
-                // Zero start - Correct entity creation
-                Entity entity = entityType.create(level, EntitySpawnReason.COMMAND);
-                if (entity != null) {
-                    entity.setPos(x, y, z);
-                    level.addFreshEntity(entity);
+                // Zero start - Correct entity creation based on summon command
+                // Check if position is within world bounds
+                if (!net.minecraft.world.level.Level.isInSpawnableBounds(blockPos)) {
+                    continue; // Skip this spawn
                 }
+
+                // Create the entity with command spawn reason
+                Entity entity = entityType.create(level, EntitySpawnReason.COMMAND);
+                if (entity == null) {
+                    continue;
+                }
+
+                // Set position and rotation
+                entity.snapTo(x, y, z, entity.getYRot(), entity.getXRot());
+
+                // If it's a mob, perform finalization spawn (sets equipment, AI, etc.)
+                if (entity instanceof Mob mob) {
+                    mob.finalizeSpawn(level, level.getCurrentDifficultyAt(entity.blockPosition()), EntitySpawnReason.COMMAND, null);
+                }
+
+                // Add the entity to the world
+                level.addFreshEntity(entity);
                 // Zero end
             }
         }
