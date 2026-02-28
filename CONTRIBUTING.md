@@ -1,16 +1,16 @@
-Contributing to Purpur
+Contributing to Zero
 ==========================
-Purpur is happy you're willing to contribute to our projects. We are usually
+Zero is happy you're willing to contribute to our projects. We are usually
 very lenient with all submitted PRs, but there are still some guidelines you
 can follow to make the approval process go more smoothly.
 
 ## Use a Personal Fork and not an Organization
 
-Purpur will routinely modify your PR, whether it's a quick rebase or to take care
+Zero will routinely modify your PR, whether it's a quick rebase or to take care
 of any minor nitpicks we might have. Often, it's better for us to solve these
 problems for you than make you go back and forth trying to fix them yourself.
 
-Unfortunately, if you use an organization for your PR, it prevents Purpur from
+Unfortunately, if you use an organization for your PR, it prevents Zero from
 modifying it. To avoid this, please do not use repositories on organizations
 for PRs.
 
@@ -45,19 +45,19 @@ javac 21.0.5
 
 ## Understanding Patches
 
-Unlike the Purpur API and its implementation, modifications to Paper and Minecraft source files
+Unlike the Zero API and its implementation, modifications to Paper and Minecraft source files
 are done through patches. These patches/extensions are split into three different sets of two
 categories, which are formatted like so:
 
-Under `purpur-api`:
+Under `zero-api`:
 
 - `paper-patches` (applies to the `paper-server/` git repo)
     - `sources`: Per-file patches to Paper API classes;
     - `features`: Larger feature patches that modify multiple Paper API classes.
 
-Under `purpur-server`:
+Under `zero-server`:
 
-- `minecraft-patches` (applies to the `purpur-server//` git repo)
+- `minecraft-patches` (applies to the `zero-server//` git repo)
   - `sources`: Per-file patches to Minecraft classes;
   - `resources`: Per-file patches to Minecraft data files;
   - `features`: Larger feature patches that modify multiple classes.
@@ -74,10 +74,10 @@ Assuming you have already forked the repository:
 1. Clone your fork to your local machine;
 2. Type `./gradlew applyAllPatches` in a terminal to apply the patches to both paper and minecraft classes.
    On Windows, remove `./` from the beginning of `gradlew` commands;
-3. cd into `purpur-server` for server changes, `purpur-api` for API changes,
+3. cd into `zero-server` for server changes, `zero-api` for API changes,
    `paper-api` for Paper API changes, and `paper-server` for Paper Server changes.
 
-`purpur-server/src/minecraft/java` and `purpur-server/src/minecraft/java/resources` are not git repositories in the traditional sense.
+`zero-server/src/minecraft/java` and `zero-server/src/minecraft/java/resources` are not git repositories in the traditional sense.
 Its initial commits are the decompiled and deobfuscated Minecraft source and resource files. The per-file
 patches are applied on top of these files as a single, large commit, which is then followed
 by the individual feature-patch commits. `paper-api/` and `paper-server/`
@@ -103,7 +103,7 @@ Some additional useful tasks are listed below:
 - `./gradlew applyAllServerFilePatches` - Applies all Minecraft and upstream server file patches (equivalent to `applyMinecraftFilePatches applyServerFilePatches`)
 - `./gradlew applyAllServerPatches` - Applies all Minecraft and upstream server patches (equivalent to `applyMinecraftPatches applyServerPatches`)
 
-- `./gradlew rebuildPaperSingleFilePatches` - Fixups and rebuilds all paper single-file patches. This is how you'd make changes to the `build.gradle.kts` files located under `purpur-api` and `purpur-server`
+- `./gradlew rebuildPaperSingleFilePatches` - Fixups and rebuilds all paper single-file patches. This is how you'd make changes to the `build.gradle.kts` files located under `zero-api` and `zero-server`
 
 ## Modifying (per-file) patches
 
@@ -127,12 +127,12 @@ edit it using `git rebase`.
     - It should show something like
       [this](https://gist.github.com/zachbr/21e92993cb99f62ffd7905d7b02f3159) in
       the text editor you get.
-    - If your editor does not have a "menu" at the bottom, you're using `vim`.  
+    - If your editor does not have a "menu" at the bottom, you're using `vim`.
       If you don't know how to use `vim` and don't want to
       learn, enter `:q!` and press enter. Before redoing this step, do
       `export EDITOR=nano` for an easier editor to use.
 1. Replace `pick` with `edit` for the commit/patch you want to modify (in this
-   case the very first commit, `purpur File Patches`), and
+   case the very first commit, `zero File Patches`), and
    "save" the changes;
 1. Make the changes you want to make to the patch;
 1. Run `git add .` to add your changes;
@@ -144,7 +144,7 @@ edit it using `git rebase`.
 
 Feature patches are exclusively used for large-scale changes that are hard to
 track and maintain and that can be optionally dropped, such as the more involved
-optimizations we have. This makes it easier to update Purpur during Minecraft updates,
+optimizations we have. This makes it easier to update Zero during Minecraft updates,
 since we can temporarily drop these patches and reapply them later.
 
 There is only a very small chance that you will have to use this system, but adding
@@ -203,7 +203,7 @@ fixup method.
 ## Rebasing PRs
 
 Steps to rebase a PR to include the latest changes from `main`.  
-These steps assume the `origin` remote is your fork of this repository and `upstream` is the official PurpurMC repository.
+These steps assume the `origin` remote is your fork of this repository and `upstream` is the official oneachina repository.
 
 1. Fetch the latest changes from upstream's main: `git fetch upstream`.
 1. Checkout your feature/fix branch and rebase on main: `git switch patch-branch && git rebase upstream/main`.
@@ -234,31 +234,31 @@ API and API-implementation contain a lot of these too, but they are no longer
 required.
 
 - You need to add a comment with a short and identifiable description of the patch:
-  `// Purpur start - <COMMIT DESCRIPTION>`
+  `// Zero start - <COMMIT DESCRIPTION>`
     - The comments should generally be about the reason the change was made, what
       it was before, or what the change is.
     - After the general commit description, you can add additional information either
       after a `;` or in the next line.
-- Multi-line changes start with `// Purpur start - <COMMIT DESCRIPTION>` and end
-  with `// Purpur end - <COMMIT DESCRIPTION>`.
-- One-line changes should have `// Purpur - <COMMIT DESCRIPTION>` at the end of the line.
+- Multi-line changes start with `// Zero start - <COMMIT DESCRIPTION>` and end
+  with `// Zero end - <COMMIT DESCRIPTION>`.
+- One-line changes should have `// Zero - <COMMIT DESCRIPTION>` at the end of the line.
 
 > [!NOTE]
 > These comments are incredibly important to be able to keep track of changes
 > across files and to remember what they are for, even a decade into the future.
 
-Here's an example of how to mark changes by Purpur:
+Here's an example of how to mark changes by Zero:
 
 ```java
-entity.getWorld().dontBeStupid(); // Purpur - Move away from beStupid()
+entity.getWorld().dontBeStupid(); // Zero - Move away from beStupid()
 entity.getFriends().forEach(Entity::explode);
 entity.updateFriends();
 
-// Purpur start - Use plugin-set spawn
+// Zero start - Use plugin-set spawn
 // entity.getWorld().explode(entity.getWorld().getSpawn());
 Location spawnLocation = ((CraftWorld) entity.getWorld()).getSpawnLocation();
 entity.getWorld().explode(new BlockPosition(spawnLocation.getX(), spawnLocation.getY(), spawnLocation.getZ()));
-// Purpur end - Use plugin-set spawn
+// Zero end - Use plugin-set spawn
 ```
 
 We generally follow the usual Java style (aka. Oracle style), or what is programmed
@@ -284,7 +284,7 @@ import net.minecraft.server.MinecraftServer;
 // don't add import here, use FQN like below
 
 public class SomeVanillaClass {
-    public final org.bukkit.Location newLocation; // Purpur - add location
+    public final org.bukkit.Location newLocation; // Zero - add location
 }
 ```
 
@@ -397,16 +397,16 @@ index a92bf8967..d0ab87d0f 100644
 
 While rarely needed, obfuscation helpers are sometimes useful when it comes
 to unmapped local variables, or poorly named method parameters. In an effort
-to make future updates easier on ourselves, Purpur tries to use obfuscation
+to make future updates easier on ourselves, Zero tries to use obfuscation
 helpers wherever it makes sense. The purpose of these helpers is to make the
 code more readable and maintainable. These helpers should be made easy to
 inline by the JVM wherever possible.
 
 An example of an obfuscation helper for a local variable:
 ```java
-double d0 = entity.getX(); final double fromX = d0; // Purpur - OBFHELPER
+double d0 = entity.getX(); final double fromX = d0; // Zero - OBFHELPER
 // ...   
-this.someMethod(fromX); // Purpur
+this.someMethod(fromX); // Zero
 ```
 
 While they may not always be done in exactly the same way, the general goal is
@@ -416,12 +416,12 @@ what fits best in your situation.
 ## Configuration files
 
 To use a configurable value in your patch, add a new entry in either the
-`PurpurConfig` or `PurpurWorldConfig` classes. Use `PurpurConfig` if a value
+`ZeroConfig` or `ZeroWorldConfig` classes. Use `ZeroConfig` if a value
 must remain the same throughout all worlds, or the latter if it can change
 between worlds. World-specific configuration options are preferred whenever
 possible.
 
-### PurpurConfig example
+### ZeroConfig example
 
 ```java
 public static boolean saveEmptyScoreboardTeams = false;
@@ -437,17 +437,17 @@ is important to the way the configuration generation system works. To access
 this value, reference it as you would any other static value:
 
 ```java
-if (!PurpurConfig.saveEmptyScoreboardTeams) {
+if (!ZeroConfig.saveEmptyScoreboardTeams) {
 ```
 
 It is often preferred that you use the fully qualified name for the
 configuration class when accessing it, like so:
-`org.purpurmc.purpur.PurpurConfig.valueHere`.  
-If this is not done, a developer for Purpur might fix that for you before
+`org.oneachina.zero.ZeroConfig.valueHere`.  
+If this is not done, a developer for Zero might fix that for you before
 merging, but it's always nice if you make it a habit where you only need 1-2
 lines changed.
 
-### PurpurWorldConfig example
+### ZeroWorldConfig example
 
 ```java
 public boolean useInhabitedTime = true;
@@ -463,22 +463,22 @@ To access this value, you'll need an instance of the `net.minecraft.world.level.
 object:
 
 ```java
-return this.level.purpurConfig.useInhabitedTime ? this.inhabitedTime : 0;
+return this.level.zeroConfig.useInhabitedTime ? this.inhabitedTime : 0;
 ```
 
 ## Testing API changes
 
-### Using the Purpur Test Plugin
+### Using the Zero Test Plugin
 
-The Purpur project has a `test-plugin` module for easily testing out API changes
+The Zero project has a `test-plugin` module for easily testing out API changes
 and additions. To use the test plugin, enable it in `test-plugin.settings.gradle.kts`,
 which will be generated after running Gradle at least once. After this, you can edit
 the test plugin, and run a server with the plugin using `./gradlew runDev` (or any
-of the other Purpur run tasks).
+of the other Zero run tasks).
 
 ### Publishing to Maven local (use in external plugins)
 
-To build and install the Purpur APIs and Server to your local Maven repository, do the following:
+To build and install the Zero APIs and Server to your local Maven repository, do the following:
 
 - Run `./gradlew publishToMavenLocal` in the base directory.
 
