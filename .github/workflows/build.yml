@@ -7,8 +7,7 @@ on:
       - "ver/**"
 
 permissions:
-  contents: read
-  write-all: true
+  contents: write
 
 jobs:
   build:
