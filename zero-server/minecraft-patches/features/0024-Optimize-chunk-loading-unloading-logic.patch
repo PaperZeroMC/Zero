@@ -1,0 +1,291 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: oneachina <ruiruixi@hotmail.com>
+Date: Sat, 28 Feb 2026 20:53:44 +0800
+Subject: [PATCH] Optimize chunk loading/unloading logic
+
+
+diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/level/chunk/ChunkData.java b/ca/spottedleaf/moonrise/patches/chunk_system/level/chunk/ChunkData.java
+index 8b9dc582627b46843f4b5ea6f8c3df2d8cac46fa..90e77e494f786423955d3b208a89f7d22122d842 100644
+--- a/ca/spottedleaf/moonrise/patches/chunk_system/level/chunk/ChunkData.java
++++ b/ca/spottedleaf/moonrise/patches/chunk_system/level/chunk/ChunkData.java
+@@ -6,6 +6,11 @@ public final class ChunkData {
+ 
+     private int referenceCount = 0;
+     public NearbyPlayers.TrackedChunk nearbyPlayers; // Moonrise - nearby players
++    
++    // Zero start - Chunk usage tracking for smart unloading
++    private int usageCount = 0; // Number of times the chunk has been accessed
++    private long lastAccessTime = System.currentTimeMillis(); // Last time the chunk was accessed
++    // Zero end
+ 
+     public ChunkData() {
+ 
+@@ -18,4 +23,23 @@ public final class ChunkData {
+     public int decreaseRef() {
+         return --this.referenceCount;
+     }
++    
++    // Zero start - Chunk usage tracking methods
++    public void incrementUsage() {
++        this.usageCount++;
++        this.lastAccessTime = System.currentTimeMillis();
++    }
++    
++    public int getUsageCount() {
++        return this.usageCount;
++    }
++    
++    public long getLastAccessTime() {
++        return this.lastAccessTime;
++    }
++    
++    public void updateLastAccessTime() {
++        this.lastAccessTime = System.currentTimeMillis();
++    }
++    // Zero end
+ }
+diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
+index 41b4c5a87b5153f845421a7df8df04c9231253a8..14f30b828a9508debafccc6af44a2f29f2fe8068 100644
+--- a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
++++ b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkHolderManager.java
+@@ -1226,13 +1226,35 @@ public final class ChunkHolderManager {
+                     } else {
+                         // processedCount + len = toUnloadCount
+                         // we cannot drain the entire section
+-                        for (int i = 0, len = toUnloadCount - processedCount; i < len; ++i) {
+-                            final NewChunkHolder holder = this.chunkHolders.get(section.chunks.removeFirstLong());
++                        // Zero start - Sort chunks by usage frequency and last access time for smarter unloading
++                        List<NewChunkHolder> candidates = new ArrayList<>();
++                        for (final LongIterator iterator = section.chunks.iterator(); iterator.hasNext();) {
++                            final NewChunkHolder holder = this.chunkHolders.get(iterator.nextLong());
+                             if (holder == null) {
+                                 throw new IllegalStateException();
+                             }
+-                            stage1.add(holder);
++                            candidates.add(holder);
++                        }
++                        
++                        // Sort by usage count (ascending) and last access time (ascending)
++                        candidates.sort((a, b) -> {
++                            int usageCompare = Integer.compare(a.holderData.getUsageCount(), b.holderData.getUsageCount());
++                            if (usageCompare != 0) {
++                                return usageCompare;
++                            }
++                            return Long.compare(a.holderData.getLastAccessTime(), b.holderData.getLastAccessTime());
++                        });
++                        
++                        // Take the first N chunks to unload
++                        int len = toUnloadCount - processedCount;
++                        for (int i = 0; i < len; ++i) {
++                            if (i < candidates.size()) {
++                                NewChunkHolder holder = candidates.get(i);
++                                stage1.add(holder);
++                                section.chunks.remove(CoordinateUtils.getChunkKey(holder.chunkX, holder.chunkZ));
++                            }
+                         }
++                        // Zero end
+                     }
+ 
+                     // run stage 1
+diff --git a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkTaskScheduler.java b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkTaskScheduler.java
+index 640548d78b87653871dd1f7b0f84574c5e205fe8..5651792e5d4364f44c8b3d2bfb36f9aef005120e 100644
+--- a/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkTaskScheduler.java
++++ b/ca/spottedleaf/moonrise/patches/chunk_system/scheduling/ChunkTaskScheduler.java
+@@ -117,6 +117,43 @@ public final class ChunkTaskScheduler {
+     private final PrioritisedTaskQueue mainThreadExecutor = new PrioritisedTaskQueue();
+ 
+     public final ChunkHolderManager chunkHolderManager;
++    
++    // Zero start - Chunk load queue management for load balancing
++    private final AtomicInteger activeChunkLoads = new AtomicInteger(0);
++    private static final int MAX_ACTIVE_CHUNK_LOADS = 64; // Maximum number of concurrent chunk loads
++    private static final double MIN_TPS_FOR_FULL_LOAD = 18.0; // Minimum TPS for full load speed
++    
++    private boolean canScheduleChunkLoad() {
++        // Check current active chunk loads
++        int currentLoads = this.activeChunkLoads.get();
++        if (currentLoads >= MAX_ACTIVE_CHUNK_LOADS) {
++            return false;
++        }
++        
++        // Check server TPS
++        double tps = this.world.getServer().getAverageTickTime() < 50.0 ? 20.0 : 1000.0 / this.world.getServer().getAverageTickTime();
++        if (tps < MIN_TPS_FOR_FULL_LOAD) {
++            // Reduce load rate based on TPS
++            double loadFactor = tps / MIN_TPS_FOR_FULL_LOAD;
++            int adjustedMaxLoads = (int)(MAX_ACTIVE_CHUNK_LOADS * loadFactor);
++            if (currentLoads >= adjustedMaxLoads) {
++                return false;
++            }
++        }
++        
++        return true;
++    }
++    
++    // Increment active chunk loads
++    private void incrementActiveLoads() {
++        this.activeChunkLoads.incrementAndGet();
++    }
++    
++    // Decrement active chunk loads
++    private void decrementActiveLoads() {
++        this.activeChunkLoads.decrementAndGet();
++    }
++    // Zero end
+ 
+     static {
+         ((ChunkSystemChunkStatus)ChunkStatus.EMPTY).moonrise$setWriteRadius(0);
+@@ -576,6 +613,17 @@ public final class ChunkTaskScheduler {
+             }, priority);
+             return;
+         }
++        
++        // Zero start - Load balancing
++        if (!this.canScheduleChunkLoad()) {
++            // Delay the chunk load if server is overloaded
++            this.scheduleChunkTask(chunkX, chunkZ, () -> {
++                ChunkTaskScheduler.this.scheduleChunkLoad(chunkX, chunkZ, toStatus, addTicket, priority, onComplete);
++            }, Priority.LOW);
++            return;
++        }
++        // Zero end
++        
+         final int accessRadius = getAccessRadius(toStatus);
+         if (this.chunkHolderManager.ticketLockArea.isHeldByCurrentThread(chunkX, chunkZ, accessRadius)) {
+             throw new IllegalStateException("Cannot schedule chunk load during ticket level update");
+diff --git a/net/minecraft/server/level/ChunkMap.java b/net/minecraft/server/level/ChunkMap.java
+index ab8893163ac85971a470e4a4d6fa76bd174e2bae..3a7fa32cde6dbc8498b6b2147517ebde6458b1a4 100644
+--- a/net/minecraft/server/level/ChunkMap.java
++++ b/net/minecraft/server/level/ChunkMap.java
+@@ -959,8 +959,65 @@ public class ChunkMap extends SimpleRegionStorage implements ChunkHolder.PlayerP
+ 
+             // Paper - rewrite chunk system
+         }
++        
++        // Zero start - Smart chunk preloading based on player movement
++        if (!flag1) {
++            this.preloadChunksForPlayer(player);
++        }
++        // Zero end
++        
+         ca.spottedleaf.moonrise.common.PlatformHooks.get().updateMaps(this.level, player); // Paper - rewrite chunk system
+     }
++    
++    // Zero start - Smart chunk preloading
++    private void preloadChunksForPlayer(ServerPlayer player) {
++        // Calculate player movement direction and speed
++        Vec3 currentPos = player.position();
++        Vec3 previousPos = new Vec3(player.xo, player.yo, player.zo);
++        Vec3 movement = currentPos.subtract(previousPos);
++        double speed = movement.length();
++        
++        // Only preload if player is moving
++        if (speed > 0.1) {
++            // Normalize movement vector to get direction
++            Vec3 direction = movement.normalize();
++            
++            // Calculate preload distance based on speed (faster = further)
++            int basePreloadDistance = 3;
++            int maxPreloadDistance = 5;
++            int preloadDistance = (int) Math.min(basePreloadDistance + speed * 2, maxPreloadDistance);
++            
++            // Get current chunk position
++            ChunkPos currentChunk = player.chunkPosition();
++            
++            // Calculate chunks to preload in the movement direction
++            int dirX = (int) Math.signum(direction.x);
++            int dirZ = (int) Math.signum(direction.z);
++            
++            // Preload chunks in the movement direction
++            for (int i = 1; i <= preloadDistance; i++) {
++                int preloadX = currentChunk.x + dirX * i;
++                int preloadZ = currentChunk.z + dirZ * i;
++                
++                // Preload the chunk and its neighbors for smooth movement
++                for (int dx = -1; dx <= 1; dx++) {
++                    for (int dz = -1; dz <= 1; dz++) {
++                        int targetX = preloadX + dx;
++                        int targetZ = preloadZ + dz;
++                        
++                        // Use the chunk task scheduler to load chunks asynchronously
++                        ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)this.level)
++                            .moonrise$loadChunksAsync(
++                                targetX, targetX, targetZ, targetZ,
++                                ca.spottedleaf.concurrentutil.util.Priority.LOW,
++                                null
++                            );
++                    }
++                }
++            }
++        }
++    }
++    // Zero end
+ 
+     private void updateChunkTracking(ServerPlayer player) {
+         throw new UnsupportedOperationException(); // Paper - rewrite chunk system
+diff --git a/net/minecraft/server/level/ServerChunkCache.java b/net/minecraft/server/level/ServerChunkCache.java
+index af67b07722bb0125acd081dab767d7e7b360623b..c850619f3ff84ac2977aad4791f913aaa5fd0487 100644
+--- a/net/minecraft/server/level/ServerChunkCache.java
++++ b/net/minecraft/server/level/ServerChunkCache.java
+@@ -279,7 +279,20 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+ 
+     @Nullable
+     public LevelChunk getChunkAtIfLoadedImmediately(int x, int z) {
+-        return this.fullChunks.get(ChunkPos.asLong(x, z));
++        LevelChunk chunk = this.fullChunks.get(ChunkPos.asLong(x, z));
++        if (chunk != null) {
++            // Zero start - Update chunk usage statistics
++            ca.spottedleaf.moonrise.patches.chunk_system.level.chunk.ChunkSystemLevelChunk chunkSystem = (ca.spottedleaf.moonrise.patches.chunk_system.level.chunk.ChunkSystemLevelChunk)chunk;
++            ca.spottedleaf.moonrise.patches.chunk_system.scheduling.NewChunkHolder holder = chunkSystem.moonrise$getChunkHolder();
++            if (holder != null) {
++                ca.spottedleaf.moonrise.patches.chunk_system.level.chunk.ChunkData chunkData = holder.holderData;
++                if (chunkData != null) {
++                    chunkData.incrementUsage();
++                }
++            }
++            // Zero end
++        }
++        return chunk;
+     }
+     // Paper end
+ 
+@@ -306,6 +319,12 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+ 
+     @Override
+     public @Nullable ChunkAccess getChunk(int x, int z, ChunkStatus chunkStatus, boolean requireChunk) {
++        // Zero start - Chunk load request filtering
++        if (!requireChunk && !this.shouldLoadChunk(x, z)) {
++            return null;
++        }
++        // Zero end
++        
+         // Paper start - rewrite chunk system
+         if (chunkStatus == ChunkStatus.FULL) {
+             final LevelChunk ret = this.fullChunks.get(ca.spottedleaf.moonrise.common.util.CoordinateUtils.getChunkKey(x, z));
+@@ -320,6 +339,26 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+         return this.getChunkFallback(x, z, chunkStatus, requireChunk);
+         // Paper end - rewrite chunk system
+     }
++    
++    // Zero start - Chunk load request filtering
++    private boolean shouldLoadChunk(int chunkX, int chunkZ) {
++        // Check if there are any players nearby that might need this chunk
++        double maxDistanceSquared = 64.0 * 64.0; // 64 blocks radius
++        
++        for (ServerPlayer player : this.level.players) {
++            ChunkPos playerChunk = player.chunkPosition();
++            double distanceSquared = ChunkPos.distSqr(chunkX, chunkZ, playerChunk.x, playerChunk.z);
++            if (distanceSquared <= maxDistanceSquared) {
++                return true;
++            }
++        }
++        
++        // Check if there are any entities that might need this chunk
++        // (Optional: add entity checks here if needed)
++        
++        return false;
++    }
++    // Zero end
+ 
+     @Override
+     public @Nullable LevelChunk getChunkNow(int chunkX, int chunkZ) {
