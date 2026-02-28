@@ -1,0 +1,79 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: oneachina <ruiruixi@hotmail.com>
+Date: Sat, 28 Feb 2026 20:30:42 +0800
+Subject: [PATCH] Repackage
+
+
+diff --git a/src/main/java/org/bukkit/block/EntityBlockStorage.java b/src/main/java/org/bukkit/block/EntityBlockStorage.java
+index 58e16c12b06fa11d30b67f5038844ff9990790ae..e039586ca322fde1f8f461ed99e23771cb408105 100644
+--- a/src/main/java/org/bukkit/block/EntityBlockStorage.java
++++ b/src/main/java/org/bukkit/block/EntityBlockStorage.java
+@@ -1,6 +1,8 @@
+ package org.bukkit.block;
+ 
+ import java.util.List;
++
++import cn.zeromc.zero.entity.StoredEntity;
+ import org.bukkit.entity.Entity;
+ import org.jetbrains.annotations.NotNull;
+ 
+@@ -55,7 +57,7 @@ public interface EntityBlockStorage<T extends Entity> extends TileState {
+      * @return The entity which was released, or null if the stored entity is not in the hive
+      */
+     @org.jetbrains.annotations.Nullable
+-    T releaseEntity(@NotNull org.purpurmc.purpur.entity.StoredEntity<T> entity);
++    T releaseEntity(@NotNull StoredEntity<T> entity);
+ 
+     /**
+      * Gets all the entities currently stored in the block.
+@@ -63,7 +65,7 @@ public interface EntityBlockStorage<T extends Entity> extends TileState {
+      * @return List of all entities which are stored in the block
+      */
+     @NotNull
+-    List<org.purpurmc.purpur.entity.StoredEntity<T>> getEntities();
++    List<StoredEntity<T>> getEntities();
+     // Purpur end - Stored Bee API
+ 
+     /**
+diff --git a/src/main/java/org/bukkit/command/SimpleCommandMap.java b/src/main/java/org/bukkit/command/SimpleCommandMap.java
+index 4b9b9c12d2b468153f95737d639e630450f6c39b..89c72eeedf2eb1af7f7601654fd40486966fa682 100644
+--- a/src/main/java/org/bukkit/command/SimpleCommandMap.java
++++ b/src/main/java/org/bukkit/command/SimpleCommandMap.java
+@@ -1,5 +1,6 @@
+ package org.bukkit.command;
+ 
++import cn.zeromc.zero.event.ExecuteCommandEvent;
+ import com.google.common.base.Preconditions;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+@@ -150,7 +151,7 @@ public class SimpleCommandMap implements CommandMap {
+ 
+         // Purpur start - ExecuteCommandEvent
+         String[] parsedArgs = Arrays.copyOfRange(args, 1, args.length);
+-        org.purpurmc.purpur.event.ExecuteCommandEvent event = new org.purpurmc.purpur.event.ExecuteCommandEvent(sender, target, sentCommandLabel, parsedArgs);
++        ExecuteCommandEvent event = new ExecuteCommandEvent(sender, target, sentCommandLabel, parsedArgs);
+         if (!event.callEvent()) {
+             return true; // cancelled
+         }
+diff --git a/src/main/java/org/bukkit/util/permissions/DefaultPermissions.java b/src/main/java/org/bukkit/util/permissions/DefaultPermissions.java
+index 5329de48a739cafac98514e24edaf5f1b9d41fff..eb7b27728bee95629ed749c1ff8a7f3f415f8a67 100644
+--- a/src/main/java/org/bukkit/util/permissions/DefaultPermissions.java
++++ b/src/main/java/org/bukkit/util/permissions/DefaultPermissions.java
+@@ -1,6 +1,8 @@
+ package org.bukkit.util.permissions;
+ 
+ import java.util.Map;
++
++import cn.zeromc.zero.util.permissions.PurpurPermissions;
+ import org.bukkit.Bukkit;
+ import org.bukkit.permissions.Permission;
+ import org.bukkit.permissions.PermissionDefault;
+@@ -89,7 +91,7 @@ public final class DefaultPermissions {
+         CommandPermissions.registerPermissions(parent);
+         BroadcastPermissions.registerPermissions(parent);
+ 
+-        org.purpurmc.purpur.util.permissions.PurpurPermissions.registerPermissions(); // Purpur - Default permissions
++        PurpurPermissions.registerPermissions(); // Purpur - Default permissions
+ 
+         parent.recalculatePermissibles();
+     }
