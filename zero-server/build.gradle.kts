@@ -235,7 +235,7 @@ tasks.jar {
             "Specification-Title" to "Zero", // Zero
             "Specification-Version" to project.version,
             "Specification-Vendor" to "Zero Team", // Zero
-            "Brand-Id" to "oneachina:zero", // Zero
+            "Brand-Id" to "zeromc:zero", // Zero
             "Brand-Name" to "Zero", // Zero
             "Build-Number" to (build ?: ""),
             "Build-Time" to buildTime.toString(),
