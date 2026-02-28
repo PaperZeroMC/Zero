@@ -1,0 +1,212 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: oneachina <ruiruixi@hotmail.com>
+Date: Sat, 28 Feb 2026 17:22:17 +0800
+Subject: [PATCH] Add async processing for player input
+
+
+diff --git a/net/minecraft/commands/Commands.java b/net/minecraft/commands/Commands.java
+index 83148f756ecc77ae45abffbd1d7cbfacf6c99e7f..d00e72d1563a86bd16a4b68906587ee78acb8540 100644
+--- a/net/minecraft/commands/Commands.java
++++ b/net/minecraft/commands/Commands.java
+@@ -305,6 +305,7 @@ public class Commands {
+             org.purpurmc.purpur.command.CompassCommand.register(this.dispatcher); // Purpur - Add compass command
+             org.purpurmc.purpur.command.RamBarCommand.register(this.dispatcher); // Purpur - Add rambar command
+             org.purpurmc.purpur.command.RamCommand.register(this.dispatcher); // Purpur - Add ram command
++            cn.oneachina.zero.command.SetTPSCommand.register(this.dispatcher); // Zero - Add setTPS command
+         }
+ 
+         if (selection.includeIntegrated) {
+diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index 91f9739bf34b824c5955ad0a9ef04dcb7c2e6736..7b87730f8e5eb33ac5a2d1e41cca626750eb5919 100644
+--- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -321,6 +321,31 @@ public class ServerGamePacketListenerImpl
+     private final io.papermc.paper.event.packet.ClientTickEndEvent tickEndEvent; // Paper - add client tick end event
+     public final io.papermc.paper.connection.PaperPlayerGameConnection playerGameConnection; // Paper
+ 
++    // Zero start - High priority thread pool for player input packets
++    private static final java.util.concurrent.ExecutorService ZERO_INPUT_EXECUTOR =
++        java.util.concurrent.Executors.newFixedThreadPool(
++            2, // Adjust based on expected load
++            r -> {
++                Thread t = new Thread(r, "Zero Input Processor");
++                t.setDaemon(true);
++                t.setPriority(Thread.MAX_PRIORITY); // Give high priority
++                return t;
++            }
++        );
++    // Zero end
++
++    // Zero start - Attack executor
++    private static final java.util.concurrent.ExecutorService ZERO_ATTACK_EXECUTOR = java.util.concurrent.Executors.newFixedThreadPool(
++        Math.max(1, Runtime.getRuntime().availableProcessors() / 2),
++        r -> {
++            Thread t = new Thread(r, "Zero Attack Thread");
++            t.setDaemon(true);
++            return t;
++        }
++    );
++    // Zero end
++
++
+     public ServerGamePacketListenerImpl(MinecraftServer server, Connection connection, ServerPlayer player, CommonListenerCookie cookie) {
+         super(server, connection, cookie);
+         this.restartClientLoadTimerAfterRespawn();
+@@ -2361,32 +2386,62 @@ public class ServerGamePacketListenerImpl
+         }
+     }
+ 
++    // Zero start - Async handleSetCarriedItem
+     @Override
+     public void handleSetCarriedItem(ServerboundSetCarriedItemPacket packet) {
+-        PacketUtils.ensureRunningOnSameThread(packet, this, this.player.level());
+-        if (this.player.isImmobile()) return; // CraftBukkit
+-        if (packet.getSlot() >= 0 && packet.getSlot() < Inventory.getSelectionSize()) {
+-            if (packet.getSlot() == this.player.getInventory().getSelectedSlot()) { return; } // Paper - don't fire itemheldevent when there wasn't a slot change
+-            PlayerItemHeldEvent event = new PlayerItemHeldEvent(this.getCraftPlayer(), this.player.getInventory().getSelectedSlot(), packet.getSlot());
+-            this.cserver.getPluginManager().callEvent(event);
+-            if (event.isCancelled()) {
+-                this.send(new ClientboundSetHeldSlotPacket(this.player.getInventory().getSelectedSlot()));
++        ZERO_INPUT_EXECUTOR.execute(() -> {
++            try {
++                if (this.player.isImmobile()) return;
++                if (packet.getSlot() < 0 || packet.getSlot() >= Inventory.getSelectionSize()) {
++                    LOGGER.warn("{} tried to set an invalid carried item", this.player.getPlainTextName());
++                    this.disconnect(Component.literal("Invalid hotbar selection (Hacking?)"), org.bukkit.event.player.PlayerKickEvent.Cause.ILLEGAL_ACTION);
++                    return;
++                }
++
++                // If slot unchanged, return early (no event needed)
++                int currentSlot = this.player.getInventory().getSelectedSlot();
++                if (packet.getSlot() == currentSlot) {
++                    return;
++                }
++
++                // Stop using item if needed (safe to do async)
++                if (this.player.getUsedItemHand() == InteractionHand.MAIN_HAND) {
++                    this.player.stopUsingItem();
++                }
++
++                // Update slot (synchronized for safety)
++                synchronized (this.player) {
++                    this.player.getInventory().setSelectedSlot(packet.getSlot());
++                }
+                 this.player.resetLastActionTime();
+-                return;
+-            }
+-            // CraftBukkit end
+-            if (this.player.getInventory().getSelectedSlot() != packet.getSlot() && this.player.getUsedItemHand() == InteractionHand.MAIN_HAND) {
+-                this.player.stopUsingItem();
+-            }
+ 
+-            this.player.getInventory().setSelectedSlot(packet.getSlot());
+-            this.player.resetLastActionTime();
+-            if (io.papermc.paper.configuration.GlobalConfiguration.get().unsupportedSettings.updateEquipmentOnPlayerActions) this.player.detectEquipmentUpdates(); // Paper - Force update attributes.
+-        } else {
+-            LOGGER.warn("{} tried to set an invalid carried item", this.player.getPlainTextName());
+-            this.disconnect(Component.literal("Invalid hotbar selection (Hacking?)"), org.bukkit.event.player.PlayerKickEvent.Cause.ILLEGAL_ACTION); // CraftBukkit // Paper - kick event cause
+-        }
++                // Submit event and detectEquipmentUpdates to main thread
++                this.server.execute(() -> {
++                    // Fire PlayerItemHeldEvent
++                    PlayerItemHeldEvent event = new PlayerItemHeldEvent(this.getCraftPlayer(), currentSlot, packet.getSlot());
++                    this.cserver.getPluginManager().callEvent(event);
++                    if (event.isCancelled()) {
++                        // Revert slot change
++                        synchronized (this.player) {
++                            this.player.getInventory().setSelectedSlot(currentSlot);
++                        }
++                        // Send client current slot
++                        this.send(new ClientboundSetHeldSlotPacket(currentSlot));
++                        this.player.resetLastActionTime();
++                        return;
++                    }
++
++                    // Update equipment (may trigger events)
++                    if (io.papermc.paper.configuration.GlobalConfiguration.get().unsupportedSettings.updateEquipmentOnPlayerActions) {
++                        this.player.detectEquipmentUpdates();
++                    }
++                });
++            } catch (Exception e) {
++                LOGGER.error("Failed to process set carried item asynchronously", e);
++            }
++        });
+     }
++    // Zero end
+ 
+     @Override
+     public void handleChat(ServerboundChatPacket packet) {
+@@ -2984,27 +3039,54 @@ public class ServerGamePacketListenerImpl
+ 
+                             @Override
+                             public void onAttack() {
+-                                if (!(target instanceof ItemEntity)
+-                                    && !(target instanceof ExperienceOrb)
+-                                    && (target != ServerGamePacketListenerImpl.this.player || ServerGamePacketListenerImpl.this.player.isSpectator()) // CraftBukkit
+-                                    && !(target instanceof AbstractArrow abstractArrow && !abstractArrow.isAttackable())) {
+-                                    ItemStack itemInHand = ServerGamePacketListenerImpl.this.player.getItemInHand(InteractionHand.MAIN_HAND);
+-                                    if (itemInHand.isItemEnabled(serverLevel.enabledFeatures())) {
+-                                        if (!ServerGamePacketListenerImpl.this.player.cannotAttackWithItem(itemInHand, 5)) {
+-                                            // Paper start - redirect attacks with piercing weapon
+-                                            PiercingWeapon piercingWeapon = itemInHand.get(DataComponents.PIERCING_WEAPON);
+-                                            if (piercingWeapon != null) {
+-                                                piercingWeapon.attack(ServerGamePacketListenerImpl.this.player, EquipmentSlot.MAINHAND);
+-                                            } else
+-                                            // Paper end - redirect attacks with piercing weapon
+-                                            ServerGamePacketListenerImpl.this.player.attack(target);
++                                // Zero start - Async attack processing with main thread execution
++                                final ServerPlayer attacker = ServerGamePacketListenerImpl.this.player;
++                                final Entity targetEntity = target;
++                                final ItemStack itemInHand = attacker.getItemInHand(InteractionHand.MAIN_HAND);
++                                final ServerLevel world = serverLevel;
++
++                                ZERO_ATTACK_EXECUTOR.execute(() -> {
++                                    try {
++                                        // Basic checks (can be done asynchronously)
++                                        if (targetEntity instanceof ItemEntity
++                                            || targetEntity instanceof ExperienceOrb
++                                            || (targetEntity == attacker && !attacker.isSpectator())
++                                            || (targetEntity instanceof AbstractArrow abstractArrow && !abstractArrow.isAttackable())) {
++                                            // Invalid target, disconnect on main thread
++                                            ServerGamePacketListenerImpl.this.server.execute(() -> {
++                                                ServerGamePacketListenerImpl.this.disconnect(
++                                                    Component.translatable("multiplayer.disconnect.invalid_entity_attacked"),
++                                                    org.bukkit.event.player.PlayerKickEvent.Cause.INVALID_ENTITY_ATTACKED
++                                                );
++                                                LOGGER.warn("Player {} tried to attack an invalid entity", attacker.getPlainTextName());
++                                            });
++                                            return;
++                                        }
++
++                                        if (!itemInHand.isItemEnabled(world.enabledFeatures())) {
++                                            return;
+                                         }
++                                        if (attacker.cannotAttackWithItem(itemInHand, 5)) {
++                                            return;
++                                        }
++
++                                        // Submit the actual attack to main thread and wait for completion
++                                        java.util.concurrent.CompletableFuture<Void> future = new java.util.concurrent.CompletableFuture<>();
++                                        ServerGamePacketListenerImpl.this.server.execute(() -> {
++                                            try {
++                                                attacker.attack(targetEntity);
++                                            } catch (Throwable t) {
++                                                future.completeExceptionally(t);
++                                            } finally {
++                                                future.complete(null);
++                                            }
++                                        });
++                                        future.get(); // Wait for attack to finish on main thread
++                                    } catch (Exception e) {
++                                        LOGGER.error("Failed to process attack asynchronously", e);
+                                     }
+-                                } else {
+-                                    ServerGamePacketListenerImpl.this.disconnect(Component.translatable("multiplayer.disconnect.invalid_entity_attacked"), org.bukkit.event.player.PlayerKickEvent.Cause.INVALID_ENTITY_ATTACKED); // Paper - add cause
+-                                    ServerGamePacketListenerImpl.LOGGER
+-                                        .warn("Player {} tried to attack an invalid entity", ServerGamePacketListenerImpl.this.player.getPlainTextName());
+-                                }
++                                });
++                                // Zero end - Async attack processing with main thread execution
+                             }
+                         }
+                     );
