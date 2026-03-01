@@ -613,6 +613,15 @@ public class PurpurConfig {
         asyncPathfindingQueueCapacity = getInt("settings.async-pathfinding.queue-capacity", asyncPathfindingQueueCapacity);
     }
 
+    public static boolean asyncChunkGenerationEnabled = true;
+    public static int asyncChunkGenerationThreadCount = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
+    public static int asyncChunkGenerationQueueCapacity = 1000;
+    private static void asyncChunkGenerationSettings() {
+        asyncChunkGenerationEnabled = getBoolean("settings.async-chunk-generation.enabled", asyncChunkGenerationEnabled);
+        asyncChunkGenerationThreadCount = getInt("settings.async-chunk-generation.thread-count", asyncChunkGenerationThreadCount);
+        asyncChunkGenerationQueueCapacity = getInt("settings.async-chunk-generation.queue-capacity", asyncChunkGenerationQueueCapacity);
+    }
+
     public static List<String> startupCommands = new ArrayList<>();
     private static void startupCommands() {
         startupCommands.clear();
