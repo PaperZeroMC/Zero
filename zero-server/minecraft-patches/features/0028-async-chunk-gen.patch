@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: oneachina <ruiruixi@hotmail.com>
+Date: Sun, 1 Mar 2026 20:14:36 +0800
+Subject: [PATCH] async chunk gen
+
+
+diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
+index b0d7b04c3d6dc7d3778016f7d8a7abda4cce25d8..38fb6ca0f82fb9c1d87256df96f19b9fc02630a9 100644
+--- a/net/minecraft/server/MinecraftServer.java
++++ b/net/minecraft/server/MinecraftServer.java
+@@ -649,6 +649,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         ((org.bukkit.craftbukkit.help.SimpleHelpMap) this.server.getHelpMap()).initializeCommands();
+         // Zero start - Initialize async pathfinding manager
+         cn.zeromc.zero.entity.ai.navigation.AsyncPathfindingInitializer.init(this.server);
++        // Zero start - Initialize async chunk generation manager
++        cn.zeromc.zero.chunk.AsyncChunkGenerationManager.init();
+         // Zero end
+         this.server.getPluginManager().callEvent(new org.bukkit.event.server.ServerLoadEvent(org.bukkit.event.server.ServerLoadEvent.LoadType.STARTUP));
+         this.connection.acceptConnections();
+@@ -994,6 +996,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+     public void close() {
+         // Zero start - Shutdown async pathfinding manager
+         cn.zeromc.zero.entity.ai.navigation.AsyncPathfindingInitializer.shutdown();
++        // Zero start - Shutdown async chunk generation manager
++        cn.zeromc.zero.chunk.AsyncChunkGenerationManager.shutdown();
+         // Zero end
+         this.stopServer();
+     }

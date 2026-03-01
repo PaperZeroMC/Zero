@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: oneachina <ruiruixi@hotmail.com>
+Date: Sun, 1 Mar 2026 20:54:37 +0800
+Subject: [PATCH] chunk cache
+
+
+diff --git a/net/minecraft/server/level/ServerChunkCache.java b/net/minecraft/server/level/ServerChunkCache.java
+index a0a422b5965e21f4669b23c6d9bb6bf8f345dd2f..a983925bb4bbf30d22d8e4bd0513a52675532aa6 100644
+--- a/net/minecraft/server/level/ServerChunkCache.java
++++ b/net/minecraft/server/level/ServerChunkCache.java
+@@ -151,7 +151,19 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+             }
+         }
+ 
+-        return load ? this.syncLoad(chunkX, chunkZ, toStatus) : null;
++        if (load) {
++            // Use async chunk generation if enabled
++            if (cn.zeromc.zero.PurpurConfig.asyncChunkGenerationEnabled && cn.zeromc.zero.chunk.AsyncChunkGenerationManager.INSTANCE != null) {
++                // For async generation, we need to use the syncLoad method for now
++                // because getChunk is expected to return immediately
++                // The async generation will be used in other places like getChunkFuture
++                return this.syncLoad(chunkX, chunkZ, toStatus);
++            } else {
++                return this.syncLoad(chunkX, chunkZ, toStatus);
++            }
++        } else {
++            return null;
++        }
+     }
+     // Paper end - rewrite chunk system
+     // Paper start - chunk tick iteration optimisations
+@@ -429,11 +441,22 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+                 }
+             };
+ 
+-            ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)this.level).moonrise$getChunkTaskScheduler().scheduleChunkLoad(
+-                x, z, chunkStatus, true,
+-                ca.spottedleaf.concurrentutil.util.Priority.HIGHER,
+-                complete
+-            );
++            // Use async chunk generation if enabled
++            if (cn.zeromc.zero.PurpurConfig.asyncChunkGenerationEnabled && cn.zeromc.zero.chunk.AsyncChunkGenerationManager.INSTANCE != null) {
++                // Submit to our async chunk generation manager
++                cn.zeromc.zero.chunk.AsyncChunkGenerationManager.INSTANCE.submitTask(
++                    this.level, x, z, chunkStatus,
++                    ca.spottedleaf.concurrentutil.util.Priority.HIGHER,
++                    complete
++                );
++            } else {
++                // Fall back to default chunk load
++                ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel)this.level).moonrise$getChunkTaskScheduler().scheduleChunkLoad(
++                    x, z, chunkStatus, true,
++                    ca.spottedleaf.concurrentutil.util.Priority.HIGHER,
++                    complete
++                );
++            }
+ 
+             return ret;
+         } else {
