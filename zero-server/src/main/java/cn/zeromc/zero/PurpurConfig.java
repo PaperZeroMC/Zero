@@ -603,6 +603,15 @@ public class PurpurConfig {
     private static void registerMinecraftDisabledCommands() {
         registerMinecraftDisabledCommands = getBoolean("settings.register-minecraft-disabled-commands", registerMinecraftDebugCommands);
     }
+    
+    public static boolean asyncPathfindingEnabled = true;
+    public static int asyncPathfindingThreadCount = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
+    public static int asyncPathfindingQueueCapacity = 100;
+    private static void asyncPathfindingSettings() {
+        asyncPathfindingEnabled = getBoolean("settings.async-pathfinding.enabled", asyncPathfindingEnabled);
+        asyncPathfindingThreadCount = getInt("settings.async-pathfinding.thread-count", asyncPathfindingThreadCount);
+        asyncPathfindingQueueCapacity = getInt("settings.async-pathfinding.queue-capacity", asyncPathfindingQueueCapacity);
+    }
 
     public static List<String> startupCommands = new ArrayList<>();
     private static void startupCommands() {
