@@ -3,10 +3,12 @@ package cn.zeromc.zero.chunk;
 import cn.zeromc.zero.PurpurConfig;
 import ca.spottedleaf.concurrentutil.util.Priority;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 public class AsyncChunkGenerationManager {
@@ -17,6 +19,8 @@ public class AsyncChunkGenerationManager {
     private ExecutorService executorService;
     private BlockingQueue<ChunkGenerationTask> taskQueue;
     private volatile boolean running;
+    private final AtomicInteger activeTasks = new AtomicInteger(0);
+    private final AtomicInteger completedTasks = new AtomicInteger(0);
     
     public static AsyncChunkGenerationManager INSTANCE;
     
@@ -55,16 +59,23 @@ public class AsyncChunkGenerationManager {
         }
     }
     
-    public void submitTask(int chunkX, int chunkZ, ChunkStatus targetStatus, Priority priority, Consumer<ChunkAccess> callback) {
-        if (!running) {
+    public void submitTask(ServerLevel level, int chunkX, int chunkZ, ChunkStatus targetStatus, Priority priority, Consumer<ChunkAccess> callback) {
+        if (!running || !PurpurConfig.asyncChunkGenerationEnabled) {
+            // If async generation is disabled, fall back to sync generation
+            ca.spottedleaf.moonrise.patches.chunk_system.scheduling.ChunkTaskScheduler scheduler = 
+                ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel) level).moonrise$getChunkTaskScheduler();
+            scheduler.scheduleChunkLoad(chunkX, chunkZ, targetStatus, true, priority, callback);
             return;
         }
         
-        ChunkGenerationTask task = new ChunkGenerationTask(chunkX, chunkZ, targetStatus, priority, callback);
+        ChunkGenerationTask task = new ChunkGenerationTask(level, chunkX, chunkZ, targetStatus, priority, callback);
         try {
             taskQueue.put(task);
         } catch (InterruptedException e) {
             e.printStackTrace();
+            if (callback != null) {
+                callback.accept(null);
+            }
         }
     }
     
@@ -72,7 +83,10 @@ public class AsyncChunkGenerationManager {
         while (running) {
             try {
                 ChunkGenerationTask task = taskQueue.take();
+                activeTasks.incrementAndGet();
                 executeTask(task);
+                activeTasks.decrementAndGet();
+                completedTasks.incrementAndGet();
             } catch (InterruptedException e) {
                 if (!running) break;
                 Thread.currentThread().interrupt();
@@ -82,24 +96,16 @@ public class AsyncChunkGenerationManager {
     
     private void executeTask(ChunkGenerationTask task) {
         try {
-            // Get the server level for the chunk
-            // Note: This is a simplification - in reality, we need to get the correct world for the chunk
-            net.minecraft.server.MinecraftServer server = net.minecraft.server.MinecraftServer.getServer();
-            for (net.minecraft.server.level.ServerLevel level : server.getAllLevels()) {
-                // Try to generate the chunk in this level
-                ca.spottedleaf.moonrise.patches.chunk_system.scheduling.ChunkTaskScheduler scheduler =
-                    ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel) level).moonrise$getChunkTaskScheduler();
-
-                // Schedule the chunk load/generation
-                scheduler.scheduleChunkLoad(task.chunkX, task.chunkZ, task.targetStatus, true, task.priority, (chunk) -> {
-                    if (task.callback != null) {
-                        task.callback.accept(chunk);
-                    }
-                });
-
-                // For now, we'll just process one world
-                break;
-            }
+            // Get the chunk task scheduler for the level
+            ca.spottedleaf.moonrise.patches.chunk_system.scheduling.ChunkTaskScheduler scheduler = 
+                ((ca.spottedleaf.moonrise.patches.chunk_system.level.ChunkSystemServerLevel) task.level).moonrise$getChunkTaskScheduler();
+            
+            // Schedule the chunk load/generation
+            scheduler.scheduleChunkLoad(task.chunkX, task.chunkZ, task.targetStatus, true, task.priority, (chunk) -> {
+                if (task.callback != null) {
+                    task.callback.accept(chunk);
+                }
+            });
         } catch (Exception e) {
             e.printStackTrace();
             if (task.callback != null) {
@@ -125,8 +131,21 @@ public class AsyncChunkGenerationManager {
         // Clear task queue
         taskQueue.clear();
     }
+    
+    // Statistics methods
+    public int getActiveTasks() {
+        return activeTasks.get();
+    }
+    
+    public int getCompletedTasks() {
+        return completedTasks.get();
+    }
+    
+    public int getQueueSize() {
+        return taskQueue.size();
+    }
 
-    private record ChunkGenerationTask(int chunkX, int chunkZ, ChunkStatus targetStatus, Priority priority,
+    private record ChunkGenerationTask(ServerLevel level, int chunkX, int chunkZ, ChunkStatus targetStatus, Priority priority,
                                        Consumer<ChunkAccess> callback) {
     }
 }
