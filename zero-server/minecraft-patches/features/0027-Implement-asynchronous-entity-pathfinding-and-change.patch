@@ -1,0 +1,190 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: oneachina <ruiruixi@hotmail.com>
+Date: Sun, 1 Mar 2026 13:37:27 +0800
+Subject: [PATCH] Implement asynchronous entity pathfinding and change server
+ port to 25567
+
+
+diff --git a/net/minecraft/server/MinecraftServer.java b/net/minecraft/server/MinecraftServer.java
+index b3b0942709602a3b417d4d97cf15a6c258c0d410..b0d7b04c3d6dc7d3778016f7d8a7abda4cce25d8 100644
+--- a/net/minecraft/server/MinecraftServer.java
++++ b/net/minecraft/server/MinecraftServer.java
+@@ -647,6 +647,9 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         io.papermc.paper.plugin.lifecycle.event.LifecycleEventRunner.INSTANCE.callReloadableRegistrarEvent(io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents.COMMANDS, io.papermc.paper.command.brigadier.PaperCommands.INSTANCE, org.bukkit.plugin.Plugin.class, io.papermc.paper.plugin.lifecycle.event.registrar.ReloadableRegistrarEvent.Cause.INITIAL); // Paper - call commands event for regular plugins
+         this.server.getCommandMap().registerServerAliases(); // Paper - relocate initial CommandMap#registerServerAliases() call
+         ((org.bukkit.craftbukkit.help.SimpleHelpMap) this.server.getHelpMap()).initializeCommands();
++        // Zero start - Initialize async pathfinding manager
++        cn.zeromc.zero.entity.ai.navigation.AsyncPathfindingInitializer.init(this.server);
++        // Zero end
+         this.server.getPluginManager().callEvent(new org.bukkit.event.server.ServerLoadEvent(org.bukkit.event.server.ServerLoadEvent.LoadType.STARTUP));
+         this.connection.acceptConnections();
+     }
+@@ -989,6 +992,9 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+ 
+     @Override
+     public void close() {
++        // Zero start - Shutdown async pathfinding manager
++        cn.zeromc.zero.entity.ai.navigation.AsyncPathfindingInitializer.shutdown();
++        // Zero end
+         this.stopServer();
+     }
+ 
+diff --git a/net/minecraft/server/dedicated/DedicatedServerProperties.java b/net/minecraft/server/dedicated/DedicatedServerProperties.java
+index 2a3b10c5e031ef44a2b53bc4fdc6e86c917f75d4..5b0357b7494eff68efed055a385773308ff5a988 100644
+--- a/net/minecraft/server/dedicated/DedicatedServerProperties.java
++++ b/net/minecraft/server/dedicated/DedicatedServerProperties.java
+@@ -71,7 +71,7 @@ public class DedicatedServerProperties extends Settings<DedicatedServerPropertie
+         "gamemode", dispatchNumberOrString(GameType::byId, GameType::byName), GameType::getName, GameType.SURVIVAL
+     );
+     public final String levelName = this.get("level-name", "world");
+-    public final int serverPort = this.get("server-port", 25565);
++    public final int serverPort = this.get("server-port", 25567);
+     public final boolean managementServerEnabled = this.get("management-server-enabled", false);
+     public final String managementServerHost = this.get("management-server-host", "localhost");
+     public final int managementServerPort = this.get("management-server-port", 0);
+diff --git a/net/minecraft/world/entity/ai/navigation/PathNavigation.java b/net/minecraft/world/entity/ai/navigation/PathNavigation.java
+index 61c7ca1d262098583d40b78e22db8fa67cf1dec2..4feb2ecfb4eeddb1552a80870e87d1ce451536f4 100644
+--- a/net/minecraft/world/entity/ai/navigation/PathNavigation.java
++++ b/net/minecraft/world/entity/ai/navigation/PathNavigation.java
+@@ -29,6 +29,8 @@ import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
+ import net.minecraft.world.phys.HitResult;
+ import net.minecraft.world.phys.Vec3;
+ import org.jspecify.annotations.Nullable;
++import cn.zeromc.zero.entity.ai.navigation.AsyncPathfindingManager;
++import java.util.concurrent.CompletableFuture;
+ 
+ public abstract class PathNavigation {
+     private static final int MAX_TIME_RECOMPUTE = 20;
+@@ -154,6 +156,11 @@ public abstract class PathNavigation {
+     }
+ 
+     protected @Nullable Path createPath(Set<BlockPos> targets, @Nullable Entity target, int regionOffset, boolean offsetUpward, int reachRange, float followRange) {
++        // 同步版本，保持现有API兼容性
++        return createPathSync(targets, target, regionOffset, offsetUpward, reachRange, followRange);
++    }
++    
++    protected @Nullable Path createPathSync(Set<BlockPos> targets, @Nullable Entity target, int regionOffset, boolean offsetUpward, int reachRange, float followRange) {
+         // Paper end - EntityPathfindEvent
+         if (targets.isEmpty()) {
+             return null;
+@@ -197,6 +204,57 @@ public abstract class PathNavigation {
+             return path;
+         }
+     }
++    
++    protected void createPathAsync(Set<BlockPos> targets, @Nullable Entity target, int regionOffset, boolean offsetUpward, int reachRange, float followRange, Runnable callback) {
++        if (targets.isEmpty() || this.mob.getY() < this.level.getMinY() || !this.canUpdatePath()) {
++            callback.run();
++            return;
++        }
++        
++        // Paper start - EntityPathfindEvent
++        boolean copiedSet = false;
++        for (BlockPos possibleTarget : targets) {
++            if (!this.mob.level().getWorldBorder().isWithinBounds(possibleTarget) || !new com.destroystokyo.paper.event.entity.EntityPathfindEvent(this.mob.getBukkitEntity(), // Paper - don't path out of world border
++                org.bukkit.craftbukkit.util.CraftLocation.toBukkit(possibleTarget, this.mob.level()), target == null ? null : target.getBukkitEntity()).callEvent()) {
++                if (!copiedSet) {
++                    copiedSet = true;
++                    targets = new java.util.HashSet<>(targets);
++                }
++                // note: since we copy the set this remove call is safe, since we're iterating over the old copy
++                targets.remove(possibleTarget);
++                if (targets.isEmpty()) {
++                    callback.run();
++                    return;
++                }
++            }
++        }
++        // Paper end - EntityPathfindEvent
++        
++        BlockPos blockPos = offsetUpward ? this.mob.blockPosition().above() : this.mob.blockPosition();
++        int i = (int)(followRange + regionOffset);
++        final PathNavigationRegion pathNavigationRegion = new PathNavigationRegion(this.level, blockPos.offset(-i, -i, -i), blockPos.offset(i, i, i));
++        final Set<BlockPos> finalTargets = targets;
++        final float finalFollowRange = followRange;
++        final int finalReachRange = reachRange;
++        final float finalMaxVisitedNodesMultiplier = this.maxVisitedNodesMultiplier;
++        
++        AsyncPathfindingManager.INSTANCE.submit(() -> {
++            // 在异步线程中执行寻路计算
++            Path path = this.pathFinder.findPath(pathNavigationRegion, this.mob, finalTargets, finalFollowRange, finalReachRange, finalMaxVisitedNodesMultiplier);
++            
++            // 在主线程中应用结果
++            AsyncPathfindingManager.INSTANCE.runOnMainThread(() -> {
++                if (path != null && path.getTarget() != null) {
++                    this.targetPos = path.getTarget();
++                    this.reachRange = finalReachRange;
++                    this.resetStuckTimeout();
++                    this.path = path;
++                }
++                callback.run();
++            });
++            return null;
++        });
++    }
+ 
+     // Paper start - Perf: Optimise pathfinding
+     private int lastFailure = 0;
+@@ -206,12 +264,37 @@ public abstract class PathNavigation {
+     public boolean moveTo(double x, double y, double z, double speedModifier) {
+         return this.moveTo(this.createPath(x, y, z, 1), speedModifier);
+     }
++    
++    public void moveToAsync(double x, double y, double z, double speedModifier) {
++        BlockPos target = BlockPos.containing(x, y, z);
++        Set<BlockPos> targets = java.util.Collections.singleton(target);
++        this.createPathAsync(targets, null, 8, false, 1, this.getMaxPathLength(), () -> {
++            if (this.path != null) {
++                this.moveTo(this.path, speedModifier);
++            }
++        });
++    }
+ 
+     public boolean moveTo(double x, double y, double z, int reachRange, double speedModifier) {
+         return this.moveTo(this.createPath(x, y, z, reachRange), speedModifier);
+     }
++    
++    public void moveToAsync(double x, double y, double z, int reachRange, double speedModifier) {
++        BlockPos target = BlockPos.containing(x, y, z);
++        Set<BlockPos> targets = java.util.Collections.singleton(target);
++        this.createPathAsync(targets, null, 8, false, reachRange, this.getMaxPathLength(), () -> {
++            if (this.path != null) {
++                this.moveTo(this.path, speedModifier);
++            }
++        });
++    }
+ 
+     public boolean moveTo(Entity entity, double speedModifier) {
++        // 同步版本，保持现有API兼容性
++        return moveToSync(entity, speedModifier);
++    }
++    
++    public boolean moveToSync(Entity entity, double speedModifier) {
+         // Paper start - Perf: Optimise pathfinding
+         if (this.pathfindFailures > 10 && this.path == null && net.minecraft.server.MinecraftServer.currentTick < this.lastFailure + 40) {
+             return false;
+@@ -230,6 +313,24 @@ public abstract class PathNavigation {
+         }
+         // Paper end - Perf: Optimise pathfinding
+     }
++    
++    public void moveToAsync(Entity entity, double speedModifier) {
++        if (this.pathfindFailures > 10 && this.path == null && net.minecraft.server.MinecraftServer.currentTick < this.lastFailure + 40) {
++            return;
++        }
++        
++        Set<BlockPos> targets = java.util.Collections.singleton(entity.blockPosition());
++        this.createPathAsync(targets, entity, 16, true, 1, this.getMaxPathLength(), () -> {
++            if (this.path != null) {
++                this.moveTo(this.path, speedModifier);
++                this.lastFailure = 0;
++                this.pathfindFailures = 0;
++            } else {
++                this.pathfindFailures++;
++                this.lastFailure = net.minecraft.server.MinecraftServer.currentTick;
++            }
++        });
++    }
+ 
+     public boolean moveTo(@Nullable Path path, double speedModifier) {
+         if (path == null) {
