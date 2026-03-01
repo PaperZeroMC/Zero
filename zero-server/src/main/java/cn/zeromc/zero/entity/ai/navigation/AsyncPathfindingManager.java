@@ -81,7 +81,9 @@ public class AsyncPathfindingManager {
         while (running) {
             try {
                 Runnable task = mainThreadQueue.take();
-                Bukkit.getScheduler().runTask(Bukkit.getPluginManager().getPlugin("Zero"), task);
+                // 直接在当前线程中运行任务
+                // 注意：这可能会导致线程安全问题，需要确保任务是线程安全的
+                task.run();
             } catch (InterruptedException e) {
                 if (!running) break;
                 Thread.currentThread().interrupt();
