@@ -1,0 +1,21 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: oneachina <ruiruixi@hotmail.com>
+Date: Sun, 1 Mar 2026 12:38:44 +0800
+Subject: [PATCH] fix command test
+
+
+diff --git a/src/test/java/io/papermc/paper/permissions/MinecraftCommandPermissionsTest.java b/src/test/java/io/papermc/paper/permissions/MinecraftCommandPermissionsTest.java
+index 1ae700532dad07a39a3b973d7c077f308c3301ee..70e86cb887cd4eecf1e0cc4e050f1216e3c37ad6 100644
+--- a/src/test/java/io/papermc/paper/permissions/MinecraftCommandPermissionsTest.java
++++ b/src/test/java/io/papermc/paper/permissions/MinecraftCommandPermissionsTest.java
+@@ -78,6 +78,10 @@ public class MinecraftCommandPermissionsTest {
+         "minecraft.command.gamemode.survival",
+         "minecraft.command.gamemode.survival.other",
+         // Purpur end - Skip junit tests for purpur commands
++        // Zero start - Skip junit tests for zero commands
++        "minecraft.command.settps",
++        "minecraft.command.zero",
++        // Zero end - Skip junit tests for zero commands
+         "minecraft.command.selector"
+     );
+ 
