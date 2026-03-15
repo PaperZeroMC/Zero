@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: oneachina <ruiruixi@hotmail.com>
+Date: Sun, 15 Mar 2026 19:32:03 +0800
+Subject: [PATCH] feat: implement serialization cache for LevelChunkSection
+
+
+diff --git a/net/minecraft/world/level/chunk/LevelChunkSection.java b/net/minecraft/world/level/chunk/LevelChunkSection.java
+index 201ba8b6ea45f526fbd5292164bb4cb6c066d9a8..5ef0b7f6c9f8cca0440efa7c9c049db0d7525ec0 100644
+--- a/net/minecraft/world/level/chunk/LevelChunkSection.java
++++ b/net/minecraft/world/level/chunk/LevelChunkSection.java
+@@ -32,6 +32,12 @@ public class LevelChunkSection implements ca.spottedleaf.moonrise.patches.block_
+     private static final short CLIENT_FORCED_SPECIAL_COLLIDING_BLOCKS = (short)9999;
+     private short specialCollidingBlocks;
+     private final ca.spottedleaf.moonrise.common.list.ShortList tickingBlocks = new ca.spottedleaf.moonrise.common.list.ShortList();
++    // Zero start - Chunk section serialization cache
++    private byte[] cachedData;
++    public void invalidateCache() {
++        this.cachedData = null;
++    }
++    // Zero end
+ 
+     @Override
+     public final boolean moonrise$hasSpecialCollidingBlocks() {
+@@ -161,6 +167,7 @@ public class LevelChunkSection implements ca.spottedleaf.moonrise.patches.block_
+         }
+ 
+         this.updateBlockCallback(x, y, z, state, blockState); // Paper - block counting
++        this.invalidateCache(); // Zero - invalidate cache on block change
+ 
+         return blockState;
+     }
+@@ -273,6 +280,7 @@ public class LevelChunkSection implements ca.spottedleaf.moonrise.patches.block_
+         PalettedContainer<Holder<Biome>> palettedContainer = this.biomes.recreate();
+         palettedContainer.read(buffer);
+         this.biomes = palettedContainer;
++        this.invalidateCache(); // Zero - invalidate cache on biome change
+     }
+ 
+     // Paper start - Anti-Xray - Add chunk packet info
+@@ -281,9 +289,26 @@ public class LevelChunkSection implements ca.spottedleaf.moonrise.patches.block_
+         this.write(buffer, null, 0);
+     }
+     public void write(FriendlyByteBuf buffer, io.papermc.paper.antixray.ChunkPacketInfo<BlockState> chunkPacketInfo, int chunkSectionIndex) {
++        // Zero start - use cached data if possible
++        if (chunkPacketInfo == null && this.cachedData != null) {
++            buffer.writeBytes(this.cachedData);
++            return;
++        }
++        // Zero end
++        // Zero start - capture data for caching
++        int startPos = buffer.writerIndex();
++        // Zero end
+         buffer.writeShort(this.nonEmptyBlockCount);
+         this.states.write(buffer, chunkPacketInfo, chunkSectionIndex);
+         this.biomes.write(buffer, null, chunkSectionIndex);
++        // Zero start - store to cache if it was a "clean" write
++        if (chunkPacketInfo == null) {
++            int endPos = buffer.writerIndex();
++            byte[] data = new byte[endPos - startPos];
++            buffer.getBytes(startPos, data);
++            this.cachedData = data;
++        }
++        // Zero end
+     // Paper end - Anti-Xray - Add chunk packet info
+     }
+ 
+@@ -301,6 +326,7 @@ public class LevelChunkSection implements ca.spottedleaf.moonrise.patches.block_
+     // CraftBukkit start
+     public void setBiome(int x, int y, int z, Holder<Biome> biome) {
+         this.biomes.set(x, y, z, biome);
++        this.invalidateCache(); // Zero - invalidate cache on biome change
+     }
+     // CraftBukkit end
+ 
+@@ -317,6 +343,7 @@ public class LevelChunkSection implements ca.spottedleaf.moonrise.patches.block_
+         }
+ 
+         this.biomes = palettedContainer;
++        this.invalidateCache(); // Zero - invalidate cache on biome change
+     }
+ 
+     public LevelChunkSection copy() {
