@@ -1,0 +1,96 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: oneachina <ruiruixi@hotmail.com>
+Date: Sun, 15 Mar 2026 20:24:21 +0800
+Subject: [PATCH] feat: implement deep async entity sensing
+
+
+diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
+index 3a74209aa8d0850da42b9172071dee4664ece8d2..fbbd8eb8d3e0a7c1aabe1a4c5075cd17bbfb1262 100644
+--- a/net/minecraft/server/level/ServerLevel.java
++++ b/net/minecraft/server/level/ServerLevel.java
+@@ -861,6 +861,17 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
+             }
+ 
+             io.papermc.paper.entity.activation.ActivationRange.activateEntities(this); // Paper - EAR
++            // Zero start - Deep Async AI: Pre-tick sensing for mobs
++            if (cn.zeromc.zero.PurpurConfig.asyncEntitySensing) {
++                profilerFiller.push("asyncSensing");
++                this.entityTickList.forEach(entity -> {
++                    if (entity instanceof Mob mob && !entity.isRemoved() && !this.tickRateManager().isEntityFrozen(entity)) {
++                        cn.zeromc.zero.ai.AsyncAiManager.submitSensingTask(mob);
++                    }
++                });
++                profilerFiller.pop();
++            }
++            // Zero end
+             // Zero start - Priority tick: players first, then other entities
+             int currentTick = this.server.getTickCount(); // Get current global tick count
+ 
+diff --git a/net/minecraft/world/entity/Mob.java b/net/minecraft/world/entity/Mob.java
+index 3355eefad13b483bb1e558ce0948c1028d4ae459..dee4f5c436df63956ba6c01cceae0d24d0cc132c 100644
+--- a/net/minecraft/world/entity/Mob.java
++++ b/net/minecraft/world/entity/Mob.java
+@@ -825,9 +825,13 @@ public abstract class Mob extends LivingEntity implements EquipmentUser, Leashab
+         }
+         // Paper end - Allow nerfed mobs to jump and float
+         ProfilerFiller profilerFiller = Profiler.get();
+-        profilerFiller.push("sensing");
+-        this.sensing.tick();
+-        profilerFiller.pop();
++        // Zero start - Deep Async AI
++        if (!cn.zeromc.zero.PurpurConfig.asyncEntitySensing) {
++            profilerFiller.push("sensing");
++            this.sensing.tick();
++            profilerFiller.pop();
++        }
++        // Zero end
+         int i = this.tickCount + this.getId();
+         if (i % 2 != 0 && this.tickCount > 1) {
+             profilerFiller.push("targetSelector");
+diff --git a/net/minecraft/world/entity/ai/Brain.java b/net/minecraft/world/entity/ai/Brain.java
+index a8b076d95ca7bbdbdb6f32bd464cf77d9894dcba..87be5e8c659f9635faac58169703cb5e2d11dd6a 100644
+--- a/net/minecraft/world/entity/ai/Brain.java
++++ b/net/minecraft/world/entity/ai/Brain.java
+@@ -47,7 +47,7 @@ public class Brain<E extends LivingEntity> {
+     static final Logger LOGGER = LogUtils.getLogger();
+     private final Supplier<Codec<Brain<E>>> codec;
+     private static final int SCHEDULE_UPDATE_DELAY = 20;
+-    private final Map<MemoryModuleType<?>, Optional<? extends ExpirableValue<?>>> memories = Maps.newHashMap();
++    private final Map<MemoryModuleType<?>, Optional<? extends ExpirableValue<?>>> memories = java.util.Collections.synchronizedMap(Maps.newHashMap());
+     private final Map<SensorType<? extends Sensor<? super E>>, Sensor<? super E>> sensors = Maps.newLinkedHashMap();
+     private final Map<Integer, Map<Activity, Set<BehaviorControl<? super E>>>> availableBehaviorsByPriority = Maps.newTreeMap();
+     private @Nullable EnvironmentAttribute<Activity> schedule;
+@@ -406,12 +406,16 @@ public class Brain<E extends LivingEntity> {
+ 
+     public void tick(ServerLevel level, E entity) {
+         this.forgetOutdatedMemories();
+-        this.tickSensors(level, entity);
++        // Zero start - Deep Async AI
++        if (!cn.zeromc.zero.PurpurConfig.asyncEntitySensing) {
++            this.tickSensors(level, entity);
++        }
++        // Zero end
+         this.startEachNonRunningBehavior(level, entity);
+         this.tickEachRunningBehavior(level, entity);
+     }
+ 
+-    private void tickSensors(ServerLevel level, E brainHolder) {
++    public void tickSensors(ServerLevel level, E brainHolder) {
+         for (Sensor<? super E> sensor : this.sensors.values()) {
+             sensor.tick(level, brainHolder);
+         }
+diff --git a/net/minecraft/world/entity/ai/sensing/Sensing.java b/net/minecraft/world/entity/ai/sensing/Sensing.java
+index c569074403b1d8b443aaa98ba9cf9bbd0e98bd2d..d9ef245288e6fb09504047cccb65b0160012c558 100644
+--- a/net/minecraft/world/entity/ai/sensing/Sensing.java
++++ b/net/minecraft/world/entity/ai/sensing/Sensing.java
+@@ -9,8 +9,8 @@ import net.minecraft.world.entity.Mob;
+ 
+ public class Sensing {
+     private final Mob mob;
+-    private final IntSet seen = new IntOpenHashSet();
+-    private final IntSet unseen = new IntOpenHashSet();
++    private final IntSet seen = it.unimi.dsi.fastutil.ints.IntSets.synchronize(new IntOpenHashSet());
++    private final IntSet unseen = it.unimi.dsi.fastutil.ints.IntSets.synchronize(new IntOpenHashSet());
+ 
+     public Sensing(Mob mob) {
+         this.mob = mob;

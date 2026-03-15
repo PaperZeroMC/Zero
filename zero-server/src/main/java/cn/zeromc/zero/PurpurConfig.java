@@ -639,6 +639,11 @@ public class PurpurConfig {
         networkCompressionLevel = getInt("settings.network.compression-level", networkCompressionLevel);
         networkUseTcpFastOpen = getBoolean("settings.network.use-tcp-fast-open", networkUseTcpFastOpen);
     }
+
+    public static boolean asyncEntitySensing = false;
+    private static void aiOptimizationSettings() {
+        asyncEntitySensing = getBoolean("settings.ai.async-entity-sensing", asyncEntitySensing);
+    }
     
     public static boolean asyncPathfindingEnabled = true;
     public static int asyncPathfindingThreadCount = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
