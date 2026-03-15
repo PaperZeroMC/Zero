@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: oneachina <ruiruixi@hotmail.com>
+Date: Sun, 15 Mar 2026 18:56:46 +0800
+Subject: [PATCH] feat: optimize player movement validation for high latency
+ environments
+
+
+diff --git a/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index 944534163db5cbe289df9d811f358d39ca5c766c..4feba9ac2142dc8fbbd9adba1897355d7c72c0e6 100644
+--- a/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -1678,7 +1678,9 @@ public class ServerGamePacketListenerImpl
+                                 d7 = d3 * d3 + d4 * d4 + d5 * d5;
+                                 boolean movedWrongly = false; // Paper - Add fail move event; rename
+                                 if (!this.player.isChangingDimension()
+-                                    && d7 > org.spigotmc.SpigotConfig.movedWronglyThreshold // Spigot
++                                    // Zero start - configurable movement validation tolerance
++                                    && d7 > (org.spigotmc.SpigotConfig.movedWronglyThreshold * cn.zeromc.zero.PurpurConfig.movementValidationTolerance) // Spigot
++                                    // Zero end
+                                     && !this.player.isSleeping()
+                                     && !this.player.isCreative()
+                                     && !this.player.isSpectator()
+@@ -1860,7 +1862,8 @@ public class ServerGamePacketListenerImpl
+ 
+     private boolean updateAwaitingTeleport() {
+         if (this.awaitingPositionFromClient != null) {
+-            if (false && this.tickCount - this.awaitingTeleportTime > 20) { // Paper - this will greatly screw with clients with > 1000ms RTT
++            // Zero start - configurable movement validation timeout
++            if (this.tickCount - this.awaitingTeleportTime > cn.zeromc.zero.PurpurConfig.movementValidationTimeout) {
+                 this.awaitingTeleportTime = this.tickCount;
+                 this.teleport(
+                     this.awaitingPositionFromClient.x,
+@@ -1870,6 +1873,7 @@ public class ServerGamePacketListenerImpl
+                     this.player.getXRot()
+                 );
+             }
++            // Zero end
+             this.allowedPlayerTicks = 20; // CraftBukkit
+ 
+             return true;

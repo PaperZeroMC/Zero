@@ -612,6 +612,13 @@ public class PurpurConfig {
     private static void registerMinecraftDisabledCommands() {
         registerMinecraftDisabledCommands = getBoolean("settings.register-minecraft-disabled-commands", registerMinecraftDebugCommands);
     }
+
+    public static double movementValidationTolerance = 1.0D;
+    public static int movementValidationTimeout = 20;
+    private static void movementValidationSettings() {
+        movementValidationTolerance = getDouble("settings.movement-validation.tolerance", movementValidationTolerance);
+        movementValidationTimeout = getInt("settings.movement-validation.timeout", movementValidationTimeout);
+    }
     
     public static boolean asyncPathfindingEnabled = true;
     public static int asyncPathfindingThreadCount = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
