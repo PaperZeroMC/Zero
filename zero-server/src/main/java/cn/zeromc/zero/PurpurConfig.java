@@ -632,6 +632,13 @@ public class PurpurConfig {
         dynamicSimulationDistanceThresholdMSPT = getDouble("settings.dynamic-simulation-distance.threshold-mspt", dynamicSimulationDistanceThresholdMSPT);
         dynamicSimulationDistanceRecoveryMSPT = getDouble("settings.dynamic-simulation-distance.recovery-mspt", dynamicSimulationDistanceRecoveryMSPT);
     }
+
+    public static int networkCompressionLevel = -1;
+    public static boolean networkUseTcpFastOpen = false;
+    private static void networkOptimizationSettings() {
+        networkCompressionLevel = getInt("settings.network.compression-level", networkCompressionLevel);
+        networkUseTcpFastOpen = getBoolean("settings.network.use-tcp-fast-open", networkUseTcpFastOpen);
+    }
     
     public static boolean asyncPathfindingEnabled = true;
     public static int asyncPathfindingThreadCount = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);

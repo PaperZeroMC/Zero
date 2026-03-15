@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: oneachina <ruiruixi@hotmail.com>
+Date: Sun, 15 Mar 2026 19:12:27 +0800
+Subject: [PATCH] feat: implement network optimizations (compression level and
+ TCP Fast Open)
+
+
+diff --git a/net/minecraft/network/Connection.java b/net/minecraft/network/Connection.java
+index 0075ba2269ec767164fc92d4a82ace213ced75e0..e2195ab9ca024cda709d89d734c44a2a2c2ffd96 100644
+--- a/net/minecraft/network/Connection.java
++++ b/net/minecraft/network/Connection.java
+@@ -789,7 +789,11 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+     // Paper end - add proper async disconnect
+     public void setupCompression(int threshold, boolean validateDecompressed) {
+         if (threshold >= 0) {
+-            com.velocitypowered.natives.compression.VelocityCompressor compressor = com.velocitypowered.natives.util.Natives.compress.get().create(io.papermc.paper.configuration.GlobalConfiguration.get().misc.compressionLevel.or(-1)); // Paper - Use Velocity cipher
++            // Zero start - use configured compression level
++            int compressionLevel = cn.zeromc.zero.PurpurConfig.networkCompressionLevel;
++            if (compressionLevel < 0) compressionLevel = io.papermc.paper.configuration.GlobalConfiguration.get().misc.compressionLevel.or(-1);
++            com.velocitypowered.natives.compression.VelocityCompressor compressor = com.velocitypowered.natives.util.Natives.compress.get().create(compressionLevel); // Paper - Use Velocity cipher
++            // Zero end
+             if (this.channel.pipeline().get("decompress") instanceof CompressionDecoder compressionDecoder) {
+                 compressionDecoder.setThreshold(compressor, threshold, validateDecompressed); // Paper - Use Velocity cipher
+             } else {
+diff --git a/net/minecraft/server/network/ServerConnectionListener.java b/net/minecraft/server/network/ServerConnectionListener.java
+index 33e1cdb00d648c992af03a976899253141314b27..16bfa802ac0c8418f64d8d4f4fa42079c576b5ac 100644
+--- a/net/minecraft/server/network/ServerConnectionListener.java
++++ b/net/minecraft/server/network/ServerConnectionListener.java
+@@ -84,6 +84,9 @@ public class ServerConnectionListener {
+                 .add(
+                     new ServerBootstrap()
+                         .channel(eventLoopGroupHolder.serverChannelCls())
++                        // Zero start - TCP Fast Open
++                        .option(ChannelOption.TCP_FASTOPEN, cn.zeromc.zero.PurpurConfig.networkUseTcpFastOpen ? 3 : 0)
++                        // Zero end
+                         .childHandler(
+                             new ChannelInitializer<Channel>() {
+                                 @Override
