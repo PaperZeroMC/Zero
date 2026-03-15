@@ -1,0 +1,18 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: oneachina <ruiruixi@hotmail.com>
+Date: Sun, 15 Mar 2026 19:03:14 +0800
+Subject: [PATCH] feat: start DynamicSimulationDistanceTask on server start
+
+
+diff --git a/net/minecraft/server/dedicated/DedicatedServer.java b/net/minecraft/server/dedicated/DedicatedServer.java
+index 004e3b76c2cc64ffb069f60b424836004f5cbb06..452528cbe38adfa01f47d435e0ee1d8e53ee1824 100644
+--- a/net/minecraft/server/dedicated/DedicatedServer.java
++++ b/net/minecraft/server/dedicated/DedicatedServer.java
+@@ -433,6 +433,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+             }
+ 
+             BossBarTask.startAll(); // Purpur - Implement TPSBar
++            cn.zeromc.zero.task.DynamicSimulationDistanceTask.instance().start(); // Zero - Implement dynamic simulation distance
+             if (PurpurConfig.beeCountPayload) BeehiveTask.instance().register(); // Purpur - Give bee counts in beehives to Purpur clients
+ 
+             this.notificationManager().serverStarted();
