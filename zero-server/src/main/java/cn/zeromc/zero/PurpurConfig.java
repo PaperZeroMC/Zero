@@ -619,6 +619,19 @@ public class PurpurConfig {
         movementValidationTolerance = getDouble("settings.movement-validation.tolerance", movementValidationTolerance);
         movementValidationTimeout = getInt("settings.movement-validation.timeout", movementValidationTimeout);
     }
+
+    public static boolean dynamicSimulationDistanceEnabled = false;
+    public static int dynamicSimulationDistanceMin = 2;
+    public static int dynamicSimulationDistanceMax = 10;
+    public static double dynamicSimulationDistanceThresholdMSPT = 45.0D;
+    public static double dynamicSimulationDistanceRecoveryMSPT = 35.0D;
+    private static void dynamicSimulationDistanceSettings() {
+        dynamicSimulationDistanceEnabled = getBoolean("settings.dynamic-simulation-distance.enabled", dynamicSimulationDistanceEnabled);
+        dynamicSimulationDistanceMin = getInt("settings.dynamic-simulation-distance.min", dynamicSimulationDistanceMin);
+        dynamicSimulationDistanceMax = getInt("settings.dynamic-simulation-distance.max", dynamicSimulationDistanceMax);
+        dynamicSimulationDistanceThresholdMSPT = getDouble("settings.dynamic-simulation-distance.threshold-mspt", dynamicSimulationDistanceThresholdMSPT);
+        dynamicSimulationDistanceRecoveryMSPT = getDouble("settings.dynamic-simulation-distance.recovery-mspt", dynamicSimulationDistanceRecoveryMSPT);
+    }
     
     public static boolean asyncPathfindingEnabled = true;
     public static int asyncPathfindingThreadCount = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
