@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: oneachina <ruiruixi@hotmail.com>
+Date: Sun, 15 Mar 2026 18:52:52 +0800
+Subject: [PATCH] feat: Implement frequency-based tick control in ServerLevel
+
+
+diff --git a/net/minecraft/server/level/ServerLevel.java b/net/minecraft/server/level/ServerLevel.java
+index ff36fcf9c7818fcadb8b2c39d73e6595f4ce62d3..3a74209aa8d0850da42b9172071dee4664ece8d2 100644
+--- a/net/minecraft/server/level/ServerLevel.java
++++ b/net/minecraft/server/level/ServerLevel.java
+@@ -761,6 +761,15 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
+         return this.environmentAttributes;
+     }
+ 
++    // Zero start - Frequency based tick control
++    private boolean shouldProcessTick(double targetTPS) {
++        if (targetTPS >= 20.0D) return true;
++        if (targetTPS <= 0.0D) return false;
++        long currentTick = this.server.getTickCount();
++        return (long)(currentTick * targetTPS / 20.0D) != (long)((currentTick - 1) * targetTPS / 20.0D);
++    }
++    // Zero end
++
+     public void tick(BooleanSupplier hasTimeLeft) {
+         ProfilerFiller profilerFiller = Profiler.get();
+         this.handlingTick = true;
+@@ -808,9 +817,14 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
+         profilerFiller.push("tickPending");
+         if (!this.isDebug() && runsNormally) {
+             long l = this.getGameTime();
+-            profilerFiller.push("blockTicks");
+-            this.blockTicks.tick(l, paperConfig().environment.maxBlockTicks, this::tickBlock); // Paper - configurable max block ticks
+-            profilerFiller.popPush("fluidTicks");
++            // Zero start - Frequency based block ticks
++            if (shouldProcessTick(cn.zeromc.zero.PurpurConfig.targetBlockTPS)) {
++                profilerFiller.push("blockTicks");
++                this.blockTicks.tick(l, paperConfig().environment.maxBlockTicks, this::tickBlock); // Paper - configurable max block ticks
++                profilerFiller.pop();
++            }
++            // Zero end
++            profilerFiller.push("fluidTicks");
+             this.fluidTicks.tick(l, paperConfig().environment.maxFluidTicks, this::tickFluid); // Paper - configurable max fluid ticks
+             profilerFiller.pop();
+         }
+@@ -857,10 +871,12 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
+                 this.tickNonPassenger(player);
+             }
+             // Zero end
++            // Zero start - Frequency based entity ticks
++            if (shouldProcessTick(cn.zeromc.zero.PurpurConfig.targetEntityTPS)) {
+             this.entityTickList
+                 .forEach(
+                     entity -> {
+-                        if (!entity.isRemoved()) {
++                        if (!entity.isRemoved() && !(entity instanceof ServerPlayer)) { // Zero - Already ticked players
+                             if (!tickRateManager.isEntityFrozen(entity)) {
+                                 profilerFiller.push("checkDespawn");
+                                 entity.checkDespawn();
+@@ -883,8 +899,14 @@ public class ServerLevel extends Level implements ServerEntityGetter, WorldGenLe
+                         }
+                     }
+                 );
++            }
++            // Zero end
+             profilerFiller.popPush("blockEntities");
+-            this.tickBlockEntities();
++            // Zero start - Frequency based block entity ticks
++            if (shouldProcessTick(cn.zeromc.zero.PurpurConfig.targetTileEntityTPS)) {
++                this.tickBlockEntities();
++            }
++            // Zero end
+             profilerFiller.pop();
+         }
+ 

@@ -599,6 +599,15 @@ public class PurpurConfig {
         registerMinecraftDebugCommands = getBoolean("settings.register-minecraft-debug-commands", registerMinecraftDebugCommands);
     }
 
+    public static double targetEntityTPS = 20.0D;
+    public static double targetTileEntityTPS = 20.0D;
+    public static double targetBlockTPS = 20.0D;
+    private static void tickControlSettings() {
+        targetEntityTPS = getDouble("settings.tick-control.entity-tps", targetEntityTPS);
+        targetTileEntityTPS = getDouble("settings.tick-control.tile-entity-tps", targetTileEntityTPS);
+        targetBlockTPS = getDouble("settings.tick-control.block-tps", targetBlockTPS);
+    }
+
     public static boolean registerMinecraftDisabledCommands = false;
     private static void registerMinecraftDisabledCommands() {
         registerMinecraftDisabledCommands = getBoolean("settings.register-minecraft-disabled-commands", registerMinecraftDebugCommands);

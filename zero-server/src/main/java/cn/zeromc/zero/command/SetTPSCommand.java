@@ -1,42 +1,37 @@
 package cn.zeromc.zero.command;
 
+import cn.zeromc.zero.PurpurConfig;
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.FloatArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.commands.SharedSuggestionProvider;
-import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.permissions.Permissions;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.Mob;
-import net.minecraft.world.phys.Vec3;
 
-import java.util.List;
 import java.util.Locale;
 
 public class SetTPSCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("settps")
             .requires((listener) -> listener.hasPermission(Permissions.COMMANDS_GAMEMASTER, "bukkit.command.settps"))
-            .then(Commands.argument("entityType", StringArgumentType.string())
-                .suggests((context, builder) -> {
-                    // Tab complete for entity types
-                    List<String> entityTypes = java.util.Arrays.asList(
-                        "zombie", "skeleton", "creeper", "spider", "enderman",
-                        "cow", "pig", "sheep", "chicken", "rabbit"
-                    );
-                    return SharedSuggestionProvider.suggest(entityTypes, builder);
+            .then(Commands.argument("entityTPS", DoubleArgumentType.doubleArg(0.1D, 20.0D))
+                .executes((context) -> {
+                    double entityTPS = DoubleArgumentType.getDouble(context, "entityTPS");
+                    return execute(context.getSource(), entityTPS, null, null);
                 })
-                .then(Commands.argument("tps", FloatArgumentType.floatArg(0.1f, 20.0f))
+                .then(Commands.argument("blockTPS", DoubleArgumentType.doubleArg(0.1D, 20.0D))
                     .executes((context) -> {
-                        String entityTypeStr = StringArgumentType.getString(context, "entityType");
-                        float tps = FloatArgumentType.getFloat(context, "tps");
-                        return execute(context.getSource(), entityTypeStr, tps);
+                        double entityTPS = DoubleArgumentType.getDouble(context, "entityTPS");
+                        double blockTPS = DoubleArgumentType.getDouble(context, "blockTPS");
+                        return execute(context.getSource(), entityTPS, blockTPS, null);
                     })
+                    .then(Commands.argument("tileEntityTPS", DoubleArgumentType.doubleArg(0.1D, 20.0D))
+                        .executes((context) -> {
+                            double entityTPS = DoubleArgumentType.getDouble(context, "entityTPS");
+                            double blockTPS = DoubleArgumentType.getDouble(context, "blockTPS");
+                            double tileEntityTPS = DoubleArgumentType.getDouble(context, "tileEntityTPS");
+                            return execute(context.getSource(), entityTPS, blockTPS, tileEntityTPS);
+                        })
+                    )
                 )
             )
         );
@@ -45,98 +40,41 @@ public class SetTPSCommand {
         dispatcher.register(Commands.literal("zero")
             .then(Commands.literal("settps")
                 .requires((listener) -> listener.hasPermission(Permissions.COMMANDS_GAMEMASTER, "bukkit.command.settps"))
-                .then(Commands.argument("entityType", StringArgumentType.string())
-                    .suggests((context, builder) -> {
-                        // Tab complete for entity types
-                        List<String> entityTypes = java.util.Arrays.asList(
-                            "zombie", "skeleton", "creeper", "spider", "enderman",
-                            "cow", "pig", "sheep", "chicken", "rabbit"
-                        );
-                        return SharedSuggestionProvider.suggest(entityTypes, builder);
+                .then(Commands.argument("entityTPS", DoubleArgumentType.doubleArg(0.1D, 20.0D))
+                    .executes((context) -> {
+                        double entityTPS = DoubleArgumentType.getDouble(context, "entityTPS");
+                        return execute(context.getSource(), entityTPS, null, null);
                     })
-                    .then(Commands.argument("tps", FloatArgumentType.floatArg(0.1f, 20.0f))
+                    .then(Commands.argument("blockTPS", DoubleArgumentType.doubleArg(0.1D, 20.0D))
                         .executes((context) -> {
-                            String entityTypeStr = StringArgumentType.getString(context, "entityType");
-                            float tps = FloatArgumentType.getFloat(context, "tps");
-                            return execute(context.getSource(), entityTypeStr, tps);
+                            double entityTPS = DoubleArgumentType.getDouble(context, "entityTPS");
+                            double blockTPS = DoubleArgumentType.getDouble(context, "blockTPS");
+                            return execute(context.getSource(), entityTPS, blockTPS, null);
                         })
+                        .then(Commands.argument("tileEntityTPS", DoubleArgumentType.doubleArg(0.1D, 20.0D))
+                            .executes((context) -> {
+                                double entityTPS = DoubleArgumentType.getDouble(context, "entityTPS");
+                                double blockTPS = DoubleArgumentType.getDouble(context, "blockTPS");
+                                double tileEntityTPS = DoubleArgumentType.getDouble(context, "tileEntityTPS");
+                                return execute(context.getSource(), entityTPS, blockTPS, tileEntityTPS);
+                            })
+                        )
                     )
                 )
             )
         );
     }
 
-    private static int execute(CommandSourceStack sender, String entityTypeStr, float tps) {
-        ServerLevel level = sender.getLevel();
+    private static int execute(CommandSourceStack sender, double entityTPS, Double blockTPS, Double tileEntityTPS) {
+        // Set target TPS values
+        PurpurConfig.targetEntityTPS = entityTPS;
+        if (blockTPS != null) PurpurConfig.targetBlockTPS = blockTPS;
+        if (tileEntityTPS != null) PurpurConfig.targetTileEntityTPS = tileEntityTPS;
 
-        // Zero start - Simplified entity count based on target TPS
-        // Calculate entity count proportional to TPS: count = tps * 5, clamped between 1 and 100.
-        int entityCount = (int) (tps * 5);
-        entityCount = Math.max(1, Math.min(100, entityCount));
-        // Zero end
+        String msg = String.format(Locale.ROOT, "Tick frequencies updated. [Entity: %.1f, Block: %.1f, TileEntity: %.1f]. Server clock remains at 20 TPS.",
+                PurpurConfig.targetEntityTPS, PurpurConfig.targetBlockTPS, PurpurConfig.targetTileEntityTPS);
 
-        // Get entity type
-        EntityType<?> entityType = getEntityType(entityTypeStr);
-
-        if (entityType == null) {
-            sender.sendFailure(Component.literal("Invalid entity type: " + entityTypeStr));
-            return 0;
-        }
-
-        // Spawn entities
-        spawnEntities(sender, level, entityType, entityCount);
-
-        sender.sendSuccess(net.kyori.adventure.text.Component.text("Spawned " + entityCount + " " + entityTypeStr + " entities. Target TPS: " + String.format(Locale.ROOT, "%.1f", tps)), false);
-        return entityCount;
-    }
-
-    private static EntityType<?> getEntityType(String entityTypeStr) {
-        // Simple mapping of entity type names to EntityType instances
-        return switch (entityTypeStr.toLowerCase()) {
-            case "zombie" -> EntityType.ZOMBIE;
-            case "skeleton" -> EntityType.SKELETON;
-            case "creeper" -> EntityType.CREEPER;
-            case "spider" -> EntityType.SPIDER;
-            case "enderman" -> EntityType.ENDERMAN;
-            case "cow" -> EntityType.COW;
-            case "pig" -> EntityType.PIG;
-            case "sheep" -> EntityType.SHEEP;
-            case "chicken" -> EntityType.CHICKEN;
-            case "rabbit" -> EntityType.RABBIT;
-            default -> null;
-        };
-    }
-
-    private static void spawnEntities(CommandSourceStack sender, ServerLevel level, EntityType<?> entityType, int count) {
-        Vec3 spawnPos = sender.getPosition();
-
-        for (int i = 0; i < count; i++) {
-            double angle = Math.random() * Math.PI * 2;
-            double distance = Math.sqrt(Math.random()) * 10;
-            double x = spawnPos.x() + Math.cos(angle) * distance;
-            double z = spawnPos.z() + Math.sin(angle) * distance;
-            double y = level.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, new net.minecraft.core.BlockPos((int)x, 0, (int)z)).getY() + 1;
-
-            net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos((int)x, (int)y, (int)z);
-
-            // entity creation without ground check
-            if (!net.minecraft.world.level.Level.isInSpawnableBounds(pos)) {
-                continue;
-            }
-
-            Entity entity = entityType.create(level, EntitySpawnReason.COMMAND);
-            if (entity == null) {
-                continue;
-            }
-
-            entity.snapTo(x, y, z, entity.getYRot(), entity.getXRot());
-
-            if (entity instanceof Mob mob) {
-                mob.finalizeSpawn(level, level.getCurrentDifficultyAt(entity.blockPosition()), EntitySpawnReason.COMMAND, null);
-            }
-
-            level.addFreshEntity(entity);
-            // Zero end
-        }
+        sender.sendSuccess(net.kyori.adventure.text.Component.text(msg), true);
+        return (int) entityTPS;
     }
 }
