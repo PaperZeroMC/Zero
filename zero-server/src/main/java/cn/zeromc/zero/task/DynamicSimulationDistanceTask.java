@@ -66,7 +66,7 @@ public class DynamicSimulationDistanceTask extends BukkitRunnable {
             FeatureHooks.setSimulationDistance(nmsLevel, distance);
             
             // Update each player's simulation distance
-            List<ServerPlayer> players = nmsLevel.players;
+            List<ServerPlayer> players = nmsLevel.players();
             for (ServerPlayer player : players) {
                 FeatureHooks.setSimulationDistance(player, distance);
             }
